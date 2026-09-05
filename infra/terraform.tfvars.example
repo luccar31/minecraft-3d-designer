@@ -1,0 +1,15 @@
+# Copiá a terraform.tfvars y ajustá.
+
+project     = "mc-blueprint"
+region      = "us-east-1"
+github_repo = "luccar31/minecraft-3d-designer"
+
+# Nombre fijo del bucket (debe ser único en todo S3). Vacío = autogenerado.
+# bucket_name = "mc-blueprint-lucas"
+
+# Dominio propio. Requiere que la zona ya exista en Route 53.
+# domain_name    = "blueprint.midominio.com"
+# hosted_zone_id = "Z0123456789ABCDEFGHIJ"
+
+# Si tu cuenta ya tiene el proveedor OIDC de GitHub (sólo puede haber uno):
+# create_oidc_provider = false
