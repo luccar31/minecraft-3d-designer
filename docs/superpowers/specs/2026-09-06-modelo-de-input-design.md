@@ -95,9 +95,9 @@ src/scene/Overlays.tsx   fantasma, cara resaltada, cursor
 
 ### 3.1 `gesture.ts`
 
-Función pura. **No importa nada**: devuelve en su salida qué habría que
-registrar, y el adaptador se encarga. Esto la vuelve importable desde Node, así
-que se testea con el Playwright que ya está instalado, sin agregar vitest.
+Función pura. **No importa nada** — verificado: cero imports. Eso la vuelve
+importable desde Node, así que se testea con el Playwright que ya está
+instalado, sin agregar vitest.
 
 ```ts
 type Phase = 'idle' | 'pending' | 'painting' | 'navigating'
@@ -105,8 +105,8 @@ type Mode = 'build' | 'navigate'
 
 type Input =
   | { kind: 'down'; pointerId: number; pointerType: string; button: number
-      x: number; y: number; hit: Hit | null; mods: Mods }
-  | { kind: 'move'; x: number; y: number; mods: Mods }
+      x: number; y: number; cell: Cell | null; mods: Mods }
+  | { kind: 'move'; x: number; y: number; cell: Cell | null }
   | { kind: 'up'; x: number; y: number }
   | { kind: 'cancel' | 'lostCapture' | 'blur' | 'unmount' }
 
@@ -118,14 +118,22 @@ type Output = {
   openStroke?: boolean
   closeStroke?: boolean
   commit?: Cell[]
-  log?: LogIntent[]
+  classified?: 'click' | 'drag' | 'camera'
+  aborted?: 'cancel' | 'lostCapture' | 'blur' | 'unmount'
 }
 ```
+
+**La telemetría la deriva el adaptador**, no la máquina. Una versión anterior de
+este spec proponía un campo `log` en la salida; se descartó al implementarlo. Un
+campo así obligaría a la máquina a conocer semántica de eventos, que es el
+acoplamiento que la pureza compró, y el adaptador ya tiene todo lo necesario:
+`classified`, `aborted`, `phase` y el modo.
+
 
 ### 3.2 `picking.ts`
 
 ```ts
-resolveCell(hit, mods, state) → {
+resolveCell(hit, mods, tool, dims) → {
   target:    Vec3 | null    // bloque apuntado
   placement: Vec3 | null    // celda vacía adyacente
   chosen:    Vec3 | null    // la que esta acción va a tocar

@@ -25,6 +25,16 @@
 - **Modo inicial**: `build`, siempre. No persiste entre sesiones.
 - Al terminar cada tarea, `npm run typecheck` tiene que pasar. Al terminar las tareas 8 en adelante, los 8 tests de `tests/editor.spec.ts` tienen que seguir verdes.
 
+## Trampas del entorno
+
+Descubiertas ejecutando las tareas 1-6. No son opcionales.
+
+- **`tsconfig.json` tiene `include: ["src"]`**, así que `npm run typecheck` **no valida `tests/`**. Un error de tipos en un spec sólo aparece cuando corre Playwright. No confundir "typecheck verde" con "los tests compilan".
+- **`noUnusedParameters: true`**: un parámetro declarado y no usado rompe el typecheck. Si una tarea deja un parámetro para tareas posteriores, va con `_` adelante y se renombra cuando se use.
+- **Playwright levanta `webServer` en TODA corrida**, incluso la de tests puros de Node, y un worktree recién creado no tiene `dist/`. Solución: dejar **un solo `vite preview` en 127.0.0.1:4173** y que `reuseExistingServer: true` lo reutilice desde todos los worktrees. Eso además elimina el choque de puerto entre worktrees.
+- **`node_modules/.bin` desaparece de forma intermitente** (el repo vive en OneDrive y hay varios agentes trabajando). Si `npx` o `npm run <script>` fallan con "no se reconoce como un comando", llamar al binario directo: `node node_modules/typescript/bin/tsc --noEmit` y `node node_modules/playwright/cli.js test`.
+- **Las cuentas de "N nuevos FAIL" de este plan no son confiables.** Están mal en varias tareas: algunos tests ya pasan por el passthrough de la tarea anterior, y un import de un módulo inexistente hace fallar la recolección del archivo entero (`Cannot find module` + `No tests found`), no una lista de N rojos. Verificar que el test **falle por el motivo correcto**, no que la cuenta coincida.
+
 ---
 
 ## Estructura de archivos
