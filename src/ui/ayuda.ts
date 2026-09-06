@@ -13,6 +13,7 @@ export type HelpGroup =
   | 'designs'
   | 'guide'
   | 'mouse'
+  | 'help'
   | 'debug'
 
 export type HelpEntry = {
@@ -39,6 +40,7 @@ export const GROUPS: { key: HelpGroup; label: string }[] = [
   { key: 'designs', label: 'Diseños' },
   { key: 'guide', label: 'Guía y materiales' },
   { key: 'mouse', label: 'Mouse' },
+  { key: 'help', label: 'Ayuda' },
   { key: 'debug', label: 'Diagnóstico' },
 ]
 
@@ -543,6 +545,16 @@ export const HELP = {
     como: 'Rueda del mouse. Si te fuiste muy lejos, Centrar vuelve a encuadrar todo.',
     atajo: ['Rueda'],
     grupo: 'mouse',
+  },
+
+  /* ayuda */
+
+  'help.shortcuts': {
+    titulo: 'Atajos de teclado',
+    que: 'Lista todos los atajos y gestos, agrupados por tarea y con buscador.',
+    como: 'Se abre con ? o desde el botón de ayuda, y se cierra con Esc.',
+    atajo: ['?'],
+    grupo: 'help',
   },
 
   /* diagnóstico */

@@ -47,7 +47,7 @@ export type PointerShortcut = {
  */
 export const SHORTCUTS: Shortcut[] = [
   {
-    id: 'debug.telemetry',
+    id: 'debug.telemetry', helpId: 'debug.panel',
     group: 'debug',
     keys: ['d'],
     mod: 'yes',
@@ -55,7 +55,7 @@ export const SHORTCUTS: Shortcut[] = [
     label: 'Abre y cierra el panel de telemetría',
   },
   {
-    id: 'edit.undo',
+    id: 'edit.undo', helpId: 'topbar.undo',
     group: 'edit',
     keys: ['z'],
     mod: 'yes',
@@ -63,7 +63,7 @@ export const SHORTCUTS: Shortcut[] = [
     label: 'Deshace la última operación',
   },
   {
-    id: 'edit.redo',
+    id: 'edit.redo', helpId: 'topbar.redo',
     group: 'edit',
     keys: ['z'],
     mod: 'yes',
@@ -71,56 +71,56 @@ export const SHORTCUTS: Shortcut[] = [
     label: 'Rehace lo último que deshiciste',
   },
   {
-    id: 'file.save',
+    id: 'file.save', helpId: 'topbar.save',
     group: 'file',
     keys: ['s'],
     mod: 'yes',
     label: 'Guarda el diseño actual',
   },
   {
-    id: 'edit.copy',
+    id: 'edit.copy', helpId: 'selection.copy',
     group: 'edit',
     keys: ['c'],
     mod: 'yes',
     label: 'Copia la selección al portapapeles',
   },
   {
-    id: 'edit.cut',
+    id: 'edit.cut', helpId: 'selection.cut',
     group: 'edit',
     keys: ['x'],
     mod: 'yes',
     label: 'Corta la selección al portapapeles',
   },
   {
-    id: 'edit.paste',
+    id: 'edit.paste', helpId: 'selection.paste',
     group: 'edit',
     keys: ['v'],
     mod: 'yes',
     label: 'Pega el portapapeles sobre la celda apuntada',
   },
   {
-    id: 'edit.cancel',
+    id: 'edit.cancel', helpId: 'selection.clear',
     group: 'edit',
     keys: ['Escape'],
     mod: 'any',
     label: 'Cancela el ancla en curso y quita la selección',
   },
   {
-    id: 'edit.delete',
+    id: 'edit.delete', helpId: 'selection.delete',
     group: 'edit',
     keys: ['Delete', 'Backspace'],
     mod: 'any',
     label: 'Borra los bloques de la selección',
   },
   {
-    id: 'view.layerUp',
+    id: 'view.layerUp', helpId: 'slice.up',
     group: 'view',
     keys: ['ArrowUp', 'PageUp'],
     mod: 'any',
     label: 'Sube una capa (sólo en modo capa)',
   },
   {
-    id: 'view.layerDown',
+    id: 'view.layerDown', helpId: 'slice.down',
     group: 'view',
     keys: ['ArrowDown', 'PageDown'],
     mod: 'any',
@@ -200,19 +200,19 @@ export const SHORTCUTS: Shortcut[] = [
     label: 'Espejo en Z: cada bloque se replica del otro lado',
   },
   {
-    id: 'view.mode3d',
+    id: 'view.mode3d', helpId: 'slice.off',
     group: 'view',
     keys: ['1'],
     label: 'Vista 3D completa, sin cortes',
   },
   {
-    id: 'view.modeBelow',
+    id: 'view.modeBelow', helpId: 'slice.below',
     group: 'view',
     keys: ['2'],
     label: 'Muestra desde la base hasta la capa actual',
   },
   {
-    id: 'view.modeIsolate',
+    id: 'view.modeIsolate', helpId: 'slice.isolate',
     group: 'view',
     keys: ['3'],
     label: 'Muestra sólo la capa actual, con la anterior de fantasma',
@@ -228,14 +228,14 @@ export const SHORTCUTS: Shortcut[] = [
 
 /** Gestures of pointer and wheel: no key, so no entry in the App.tsx handler. */
 export const POINTER_SHORTCUTS: PointerShortcut[] = [
-  { id: 'pointer.place', gesture: 'Click', label: 'Coloca un bloque contra la cara que apuntás' },
-  { id: 'pointer.erase', gesture: 'Shift + click', label: 'Borra el bloque que apuntás' },
-  { id: 'pointer.pick', gesture: 'Alt + click', label: 'Adopta el bloque que apuntás como bloque activo' },
-  { id: 'pointer.paint', gesture: 'Arrastrar', label: 'Pinta o borra varios bloques en un solo trazo' },
-  { id: 'pointer.orbit', gesture: 'Arrastrar en el vacío', label: 'Gira la cámara alrededor de la construcción' },
-  { id: 'pointer.pan', gesture: 'Botón derecho', label: 'Desplaza la cámara sin girarla' },
-  { id: 'pointer.dolly', gesture: 'Botón del medio', label: 'Acerca y aleja arrastrando' },
-  { id: 'pointer.zoom', gesture: 'Rueda', label: 'Acerca y aleja la cámara' },
+  { id: 'pointer.place', helpId: 'canvas.place', gesture: 'Click', label: 'Coloca un bloque contra la cara que apuntás' },
+  { id: 'pointer.erase', helpId: 'canvas.erase', gesture: 'Shift + click', label: 'Borra el bloque que apuntás' },
+  { id: 'pointer.pick', helpId: 'canvas.pick', gesture: 'Alt + click', label: 'Adopta el bloque que apuntás como bloque activo' },
+  { id: 'pointer.paint', helpId: 'canvas.paint', gesture: 'Arrastrar', label: 'Pinta o borra varios bloques en un solo trazo' },
+  { id: 'pointer.orbit', helpId: 'canvas.orbit', gesture: 'Arrastrar en el vacío', label: 'Gira la cámara alrededor de la construcción' },
+  { id: 'pointer.pan', helpId: 'canvas.pan', gesture: 'Botón derecho', label: 'Desplaza la cámara sin girarla' },
+  { id: 'pointer.dolly', helpId: 'canvas.zoom', gesture: 'Botón del medio', label: 'Acerca y aleja arrastrando' },
+  { id: 'pointer.zoom', helpId: 'canvas.zoom', gesture: 'Rueda', label: 'Acerca y aleja la cámara' },
 ]
 
 export const GROUPS: { id: ShortcutGroup; title: string }[] = [
@@ -295,8 +295,8 @@ export function comboLabels(s: Shortcut): string[] {
 
 /* ── help catalogue (03) ─────────────────────────────────────────────── */
 
-/** Shape of an entry of src/ui/ayuda.ts, all optional to survive its drafts. */
-export type HelpEntry = { que?: string; como?: string; atajo?: string }
+/** Structural shape of an entry of src/ui/ayuda.ts, so neither module imports the other. */
+export type HelpEntry = { que?: string; como?: string; atajo?: readonly string[] }
 
 export type HelpCatalog = Record<string, HelpEntry | undefined>
 

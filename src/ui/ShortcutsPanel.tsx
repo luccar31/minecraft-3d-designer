@@ -1,12 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   comboLabels, GROUPS, helpText, POINTER_GROUP_TITLE, POINTER_SHORTCUTS, SHORTCUTS,
-  type HelpCatalog,
 } from './atajos'
+import { HELP } from './ayuda'
 import './atajos.css'
-
-// Punto de integración con 03: reemplazar esta línea por `import { HELP } from './ayuda'`.
-const HELP: HelpCatalog = {}
 
 type Row = { id: string; keys: string[]; text: string; gap: boolean }
 type Section = { title: string; rows: Row[] }
