@@ -223,6 +223,26 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   font-size: 12px; padding: 5px 10px;
 }
 
+/* ── modo de interacción ─────────────────────────────────────────────────── */
+
+.mode-indicator { font-weight: 600; }
+.mode-indicator.navigate { background: var(--accent-dim); border-color: var(--accent); }
+
+.viewport.navigate::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 4;
+  border: 2px solid var(--accent); border-radius: 4px; opacity: .55;
+}
+.viewport.build canvas { cursor: crosshair; }
+.viewport.navigate canvas { cursor: grab; }
+.viewport.navigate canvas:active { cursor: grabbing; }
+
+.coord-readout {
+  position: absolute; left: 10px; bottom: 10px; z-index: 5; pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px;
+  color: var(--muted); background: #0009; border: 1px solid var(--line);
+  border-radius: 6px; padding: 3px 8px;
+}
+
 .boot-error {
   max-width: 720px; margin: 40px auto; padding: 22px 24px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
