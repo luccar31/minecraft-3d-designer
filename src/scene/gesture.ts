@@ -98,7 +98,9 @@ export function step(
         candidate: input.cell,
         lastKey: '',
       },
-      out: { phase: 'pending', orbitEnabled: true, capture: input.pointerId },
+      // Orbit stays off: OrbitControls listens on the canvas, outside R3F, so
+      // stopPropagation cannot hold it and the camera drifts before classifying.
+      out: { phase: 'pending', orbitEnabled: false, capture: input.pointerId },
     }
   }
 
@@ -106,7 +108,7 @@ export function step(
     const dx = input.x - state.startX
     const dy = input.y - state.startY
     if (Math.hypot(dx, dy) <= thresholdFor(state.pointerType)) {
-      return { state, out: { phase: 'pending', orbitEnabled: true } }
+      return { state, out: { phase: 'pending', orbitEnabled: false } }
     }
     if (!ctx.dragTool) {
       // Line, rect, fill, select and picker do not paint while dragging.
@@ -168,5 +170,11 @@ export function step(
     }
   }
 
-  return { state, out: { phase: state.phase, orbitEnabled: state.phase !== 'painting' } }
+  return {
+    state,
+    out: {
+      phase: state.phase,
+      orbitEnabled: state.phase !== 'painting' && state.phase !== 'pending',
+    },
+  }
 }

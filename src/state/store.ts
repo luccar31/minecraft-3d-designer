@@ -7,6 +7,7 @@ import {
 } from '../voxel/ops'
 import { DEFAULT_BLOCK } from '../blocks/palette'
 import { EV, rec, recObj, registerSnapshotSource, str } from '../debug'
+import type { Mode } from '../scene/gesture'
 import { deserializeDesign, serializeDesign } from '../storage/codec'
 import { activeStore } from '../storage'
 import type {
@@ -51,6 +52,7 @@ export type EditorState = {
   mirrorZ: boolean
   rectFilled: boolean
   showGrid: boolean
+  mode: Mode
 
   anchor: UV | null
   selection: BoxSel | null
@@ -76,6 +78,7 @@ export type EditorState = {
   setHover: (p: Vec3 | null) => void
   toggle: (k: 'mirrorX' | 'mirrorZ' | 'rectFilled' | 'showGrid') => void
   setView: (v: 'edit' | 'guide') => void
+  setMode: (m: Mode) => void
   setStatus: (s: string | null) => void
   requestFit: () => void
 
@@ -123,6 +126,8 @@ export const useEditor = create<EditorState>((set, get) => ({
   mirrorZ: false,
   rectFilled: false,
   showGrid: true,
+  // Never persisted: opening the app in a mode chosen days ago is a mode error.
+  mode: 'build',
 
   anchor: null,
   selection: null,
@@ -187,6 +192,11 @@ export const useEditor = create<EditorState>((set, get) => ({
   setView: (view) => {
     rec(EV.view, str(get().view), str(view))
     set({ view })
+  },
+  setMode: (mode) => {
+    if (get().mode === mode) return
+    rec(EV.mode, str(get().mode), str(mode))
+    set({ mode })
   },
   setStatus: (status) => {
     if (status) rec(EV.status, str(status.slice(0, 80)))
@@ -569,6 +579,7 @@ registerSnapshotSource(() => {
     mirrorZ: s.mirrorZ,
     rectFilled: s.rectFilled,
     showGrid: s.showGrid,
+    mode: s.mode,
     view: s.view,
     blocks: s.world.size,
     chunks: s.world.nonEmptyChunks().length,

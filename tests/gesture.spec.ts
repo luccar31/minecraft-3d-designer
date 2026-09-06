@@ -43,6 +43,28 @@ test('moverse menos que el umbral sigue siendo un click', () => {
   expect(c.out.commit).toEqual([{ x: 1, y: 0, z: 1 }])
 })
 
+test('en pending la órbita está apagada, y sigue apagada bajo el umbral', () => {
+  const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), BUILD)
+  expect(a.state.phase).toBe('pending')
+  expect(a.out.orbitEnabled).toBe(false)
+
+  const b = step(a.state, { kind: 'move', x: 102, y: 101, cell: { x: 1, y: 0, z: 1 } }, BUILD)
+  expect(b.state.phase).toBe('pending')
+  expect(b.out.orbitEnabled).toBe(false)
+
+  const c = step(b.state, { kind: 'up', x: 102, y: 101 }, BUILD)
+  expect(c.out.orbitEnabled).toBe(true)
+})
+
+test('con herramienta de click, cruzar el umbral vuelve a habilitar la órbita', () => {
+  const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), CLICK_TOOL)
+  expect(a.out.orbitEnabled).toBe(false)
+
+  const b = step(a.state, { kind: 'move', x: 130, y: 100, cell: { x: 4, y: 0, z: 1 } }, CLICK_TOOL)
+  expect(b.state.phase).toBe('navigating')
+  expect(b.out.orbitEnabled).toBe(true)
+})
+
 test('cruzar el umbral abre el trazo y commitea la celda candidata', () => {
   const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), BUILD)
   const b = step(a.state, { kind: 'move', x: 106, y: 100, cell: { x: 2, y: 0, z: 1 } }, BUILD)

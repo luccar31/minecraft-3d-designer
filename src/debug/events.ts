@@ -104,6 +104,7 @@ export const EV = {
   layerAxis: def('tool', 'layer-axis', ['$from', '$to'], LEVEL.ACTIONS),
   layerMode: def('tool', 'layer-mode', ['$from', '$to'], LEVEL.ACTIONS),
   toggle: def('tool', 'toggle', ['$which', 'value'], LEVEL.ACTIONS),
+  mode: def('tool', 'mode', ['$from', '$to'], LEVEL.ACTIONS),
 
   /* keyboard */
   key: def('keyboard', 'key', ['$key', 'mods', 'repeat'], LEVEL.ACTIONS),
