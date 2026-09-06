@@ -259,6 +259,35 @@ test('la cara devuelta es la del bloque de apoyo', () => {
   expect(r.face!.center).toEqual({ x: 7.5, y: 2, z: 7.5 })
 })
 
+test('en el plano de corte, colocar y borrar tocan la misma celda', () => {
+  const hit = hitOn('slice', [7.5, 2.5, 9.5], [0, 1, 0])
+  const place = resolveCell(hit, NO_MODS, 'brush', DIMS)
+  expect(place.target).toEqual({ x: 7, y: 2, z: 9 })
+  expect(place.placement).toEqual({ x: 7, y: 2, z: 9 })
+  expect(place.chosen).toEqual({ x: 7, y: 2, z: 9 })
+  expect(place.action).toBe('place')
+  expect(place.face).toBeNull()
+  expect(place.valid).toBe(true)
+
+  const erase = resolveCell(hit, NO_MODS, 'eraser', DIMS)
+  expect(erase.target).toEqual({ x: 7, y: 2, z: 9 })
+  expect(erase.chosen).toEqual({ x: 7, y: 2, z: 9 })
+  expect(erase.action).toBe('erase')
+})
+
+test('en el plano de corte, la normal no desplaza la celda', () => {
+  // A slice plane facing along x still resolves to floor(point), not an
+  // offset cell: there is no block behind a 2D plane to offset from.
+  const hit = hitOn('slice', [3.5, 4.5, 9.9], [1, 0, 0])
+  const r = resolveCell(hit, NO_MODS, 'brush', DIMS)
+  expect(r.chosen).toEqual({ x: 3, y: 4, z: 9 })
+})
+
+test('en el plano de corte, fuera de la grilla es inválido', () => {
+  const r = resolveCell(hitOn('slice', [7.5, 20, 9.5], [0, 1, 0]), NO_MODS, 'brush', DIMS)
+  expect(r.valid).toBe(false)
+})
+
 test('un toque corto de Space alterna de build a navigate', () => {
   const d = spaceDown('build', 1000)
   expect(d.mode).toBe('navigate')

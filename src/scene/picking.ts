@@ -34,8 +34,17 @@ const offsetFloor = (
   z: Math.floor(p.z + sign * n.z * 0.5 + (sign > 0 ? EPS : -EPS) * n.z),
 })
 
+const floorPoint = (p: Hit['point']): Cell => ({
+  x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z),
+})
+
 const inBounds = (c: Cell, d: Dims) =>
   c.x >= 0 && c.y >= 0 && c.z >= 0 && c.x < d.x && c.y < d.y && c.z < d.z
+
+const actionFor = (mods: Mods, tool: Tool): Action =>
+  mods.alt || tool === 'picker' ? 'pick'
+    : mods.shift || tool === 'eraser' ? 'erase'
+      : 'place'
 
 export function resolveCell(
   hit: Hit,
@@ -43,15 +52,25 @@ export function resolveCell(
   tool: Tool,
   dims: Dims,
 ): Resolution {
+  if (hit.kind === 'slice') {
+    // A slice plane is a 2D surface: place and erase touch the same cell,
+    // with no block behind it to offset from.
+    const cell = floorPoint(hit.point)
+    return {
+      target: cell,
+      placement: cell,
+      chosen: cell,
+      action: actionFor(mods, tool),
+      face: null,
+      valid: inBounds(cell, dims),
+    }
+  }
+
   const target = hit.kind === 'block' ? offsetFloor(hit.point, hit.normal, -1) : null
   const placement = offsetFloor(hit.point, hit.normal, 1)
 
-  let action: Action =
-    mods.alt || tool === 'picker' ? 'pick'
-      : mods.shift || tool === 'eraser' ? 'erase'
-        : 'place'
-
-  let chosen = action === 'place' ? placement : target
+  let action = actionFor(mods, tool)
+  const chosen = action === 'place' ? placement : target
   if (chosen === null) action = 'none'
 
   const face = target
