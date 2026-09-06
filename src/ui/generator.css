@@ -1,0 +1,79 @@
+/* ── generator panel ─────────────────────────────────────────────────────── */
+/* Propio del workstream 06: no toca src/styles.css, que es compartido. */
+
+.gen-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  width: min(268px, calc(100vw - 24px));
+}
+
+.gen-panel .section { margin-bottom: 0; }
+
+.gen-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px; }
+
+.gen-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  text-align: left;
+}
+
+/* Cuántos arrastres pide: los volumétricos piden dos. */
+.gen-list .steps {
+  flex: none;
+  font-family: ui-monospace, monospace;
+  font-size: 9.5px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 5px;
+}
+
+.gen-list button.on .steps { color: #dbeaff; border-color: var(--accent); }
+
+.gen-box {
+  display: grid;
+  grid-template-columns: auto repeat(3, 1fr);
+  align-items: center;
+  gap: 4px;
+}
+
+.gen-box input { padding: 4px 6px; font-family: ui-monospace, monospace; font-size: 11.5px; }
+
+.gen-wide { width: 100%; margin-top: 6px; font-size: 11.5px; padding: 4px 8px; }
+
+.gen-param {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 26px;
+}
+
+.gen-param > .label { flex: 1; }
+.gen-param input[type="number"] { width: 72px; flex: none; padding: 4px 6px; }
+.gen-param input[type="checkbox"] { width: auto; flex: none; }
+
+.gen-block { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.gen-block .nm { font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gen-block button { padding: 3px 7px; font-size: 10.5px; flex: none; }
+
+.gen-count { margin: 0; font-size: 12.5px; }
+.gen-count strong { font-family: ui-monospace, monospace; }
+
+.gen-warn { margin: 0; font-size: 11.5px; color: #e2b04a; }
+.gen-warn.err { color: var(--danger); }
+
+.gen-confirm {
+  flex: 1;
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: #dbeaff;
+}
