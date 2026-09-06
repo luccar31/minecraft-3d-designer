@@ -130,10 +130,15 @@ export function Preview({ res, blockId, atlas }: {
 }
 
 export function GridBounds({ dims }: { dims: Dims }) {
-  const geo = useMemo(
-    () => new THREE.EdgesGeometry(new THREE.BoxGeometry(dims.x, dims.y, dims.z)),
-    [dims.x, dims.y, dims.z],
-  )
+  // Scaling the unit edges would also scale the line width, so this one keeps
+  // its own geometry; it just has to be freed when the grid is resized.
+  const geo = useMemo(() => {
+    const box = new THREE.BoxGeometry(dims.x, dims.y, dims.z)
+    const edges = new THREE.EdgesGeometry(box)
+    box.dispose()
+    return edges
+  }, [dims.x, dims.y, dims.z])
+  useEffect(() => () => geo.dispose(), [geo])
   return (
     <lineSegments geometry={geo} position={[dims.x / 2, dims.y / 2, dims.z / 2]}>
       <lineBasicMaterial color="#3d4756" transparent opacity={0.75} />
