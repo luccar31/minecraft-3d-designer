@@ -9,12 +9,17 @@ import { Chunks } from './Chunks'
 import { AnchorMarker, Cursor, GhostSlice, GridBounds, SelectionBox, SlicePlane } from './Overlays'
 import { worldToPlane } from '../voxel/ops'
 import {
+  initialState, step,
+  type Cell, type Ctx, type GestureState, type Input, type Mods, type Output,
+} from './gesture'
+import { resolveCell, type Hit, type HitKind, type Resolution } from './picking'
+import {
   attachRenderer, beginGesture, endGesture, EV, packMods, rec, startFrames, str,
   touchClock, watchCanvas,
 } from '../debug'
-import type { Vec3 } from '../types'
 
 const NORMAL_MATRIX = new THREE.Matrix3()
+const NO_MODS: Mods = { shift: false, alt: false, ctrl: false, meta: false }
 
 function worldNormal(e: ThreeEvent<PointerEvent>): THREE.Vector3 {
   if (!e.face) return new THREE.Vector3(0, 1, 0)
@@ -23,12 +28,6 @@ function worldNormal(e: ThreeEvent<PointerEvent>): THREE.Vector3 {
     .applyNormalMatrix(NORMAL_MATRIX.getNormalMatrix(e.object.matrixWorld))
     .normalize()
 }
-
-const floorVec = (p: THREE.Vector3, n: THREE.Vector3, sign: number): Vec3 => ({
-  x: Math.floor(p.x + sign * n.x * 0.5),
-  y: Math.floor(p.y + sign * n.y * 0.5),
-  z: Math.floor(p.z + sign * n.z * 0.5),
-})
 
 /** Fits the camera to the build, or the grid if empty. */
 function ViewFitter() {
@@ -63,6 +62,7 @@ function Editor() {
   const store = useEditor()
   const { camera, gl } = useThree()
   const controls = useThree((s) => s.controls) as { enabled: boolean } | null
+  const canvasEl = gl.domElement
 
   const atlas = useMemo(() => getAtlasTexture(), [])
 
@@ -107,62 +107,110 @@ function Editor() {
 
   const sliceMode = store.sliceView !== 'off'
 
-  /* ── drawing gesture ────────────────────────────────────────────────── */
+  /* ── gesture: R3F pointer events → pure state machine → store ─────────── */
 
   const raycaster = useMemo(() => new THREE.Raycaster(), [])
+
+  const gesture = useRef<GestureState>(initialState)
+  /** Last cell resolution, from either the hover ray or the drag plane. */
+  const pendingRes = useRef<Resolution | null>(null)
+  const lastHit = useRef<Hit | null>(null)
   const dragPlane = useRef<THREE.Plane | null>(null)
   const dragNormal = useRef(new THREE.Vector3(0, 1, 0))
-  const dragErase = useRef(false)
-  const lastCell = useRef('')
+  /** Frozen at pointerdown: releasing Shift mid-drag must not change the action. */
+  const dragMods = useRef<Mods>(NO_MODS)
+  /** Frozen too: a plate or slice hit stays that kind for the whole drag. */
+  const dragKind = useRef<HitKind>('block')
+  const downPos = useRef({ x: 0, y: 0 })
+  const gestureT0 = useRef(0)
+  const gestureCells = useRef(0)
+  const lastOrbit = useRef(true)
 
-  const applyAtPoint = useCallback(
-    (p: THREE.Vector3, n: THREE.Vector3, erase: boolean, alt: boolean) => {
-      const s = useEditor.getState()
-      if (s.sliceView !== 'off') {
-        const cellPoint: Vec3 = {
-          x: Math.floor(p.x),
-          y: Math.floor(p.y),
-          z: Math.floor(p.z),
-        }
-        const uv = worldToPlane(s.sliceAxis, cellPoint)
-        const pd =
-          s.sliceAxis === 'y'
-            ? { u: s.world.dims.x, v: s.world.dims.z }
-            : s.sliceAxis === 'x'
-              ? { u: s.world.dims.z, v: s.world.dims.y }
-              : { u: s.world.dims.x, v: s.world.dims.y }
-        if (uv.u < 0 || uv.v < 0 || uv.u >= pd.u || uv.v >= pd.v) return
-        const tag = `${uv.u},${uv.v}`
-        if (tag === lastCell.current) return
-        lastCell.current = tag
-        if (alt) {
-          s.pickAt({ ...cellPoint })
-          return
-        }
-        s.planeAction(uv, erase)
-        return
+  const hitFrom = useCallback((e: ThreeEvent<PointerEvent>): Hit => {
+    const name = e.object.name
+    const kind: HitKind =
+      name === 'build-plate' ? 'plate' : name === 'slice-plane' ? 'slice' : 'block'
+    const n = worldNormal(e)
+    return {
+      kind,
+      point: { x: e.point.x, y: e.point.y, z: e.point.z },
+      normal: { x: n.x, y: n.y, z: n.z },
+    }
+  }, [])
+
+  const modsOf = (e: { shiftKey: boolean; altKey: boolean; ctrlKey: boolean; metaKey: boolean }): Mods =>
+    ({ shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, meta: e.metaKey })
+
+  const ctxNow = (): Ctx => {
+    const s = useEditor.getState()
+    return { mode: s.mode, dragTool: s.tool === 'brush' || s.tool === 'eraser' }
+  }
+
+  /** Distance from the pointerdown that opened the current gesture, for telemetry. */
+  const distFromDown = (input: Input): number =>
+    'x' in input ? Math.hypot(input.x - downPos.current.x, input.y - downPos.current.y) : NaN
+
+  const apply = useCallback((out: Output, input: Input) => {
+    const s = useEditor.getState()
+    // OrbitControls reads the canvas directly, outside R3F: this has to run
+    // on every output, `false` included, or the camera drifts mid-gesture.
+    if (controls) controls.enabled = out.orbitEnabled
+    if (out.orbitEnabled !== lastOrbit.current) {
+      lastOrbit.current = out.orbitEnabled
+      rec(EV.orbitEnabled, out.orbitEnabled ? 1 : 0, str(out.phase))
+    }
+    if (out.capture !== undefined) {
+      try {
+        canvasEl.setPointerCapture(out.capture)
+        rec(EV.pointerCapture, out.capture, 1)
+      } catch {
+        rec(EV.pointerCapture, out.capture, 0)
       }
+    }
+    if (out.release !== undefined) {
+      try {
+        canvasEl.releasePointerCapture(out.release)
+      } catch {
+        // Already released.
+      }
+    }
+    if (out.openStroke) s.beginStroke()
+    if (out.commit?.length) {
+      gestureCells.current += out.commit.length
+      const action = pendingRes.current?.action
+      if (action === 'pick') {
+        s.pickAt(out.commit[0])
+      } else if (s.sliceView !== 'off') {
+        // The slice plane is 2D: route through the same tool dispatch the
+        // click path uses, instead of writing cells directly.
+        const erase = action === 'erase'
+        for (const cell of out.commit) s.planeAction(worldToPlane(s.sliceAxis, cell), erase)
+      } else {
+        const erase = action === 'erase'
+        s.applyCells(out.commit.map((cell) => ({ p: cell, id: erase ? undefined : s.block })))
+      }
+    }
+    if (out.closeStroke) s.endStroke()
+    if (out.classified) {
+      const ms = performance.now() - gestureT0.current
+      const dist = distFromDown(input)
+      if (out.phase === 'idle') rec(EV.gestureEnd, str(out.classified), ms, gestureCells.current, dist)
+      else rec(EV.gestureClassified, str(out.classified), dist, ms)
+    }
+    if (out.aborted) rec(EV.gestureAborted, str(out.aborted), performance.now() - gestureT0.current)
+  }, [controls, canvasEl])
 
-      const target = floorVec(p, n, -1)
-      const place = floorVec(p, n, 1)
-      const cell = erase || alt || s.tool === 'eraser' || s.tool === 'picker' ? target : place
-      // Logs both candidate cells: comparing chosen vs. cursor-drawn reveals
-      // off-by-one bugs.
-      rec(EV.rayCell, target.x, target.y, target.z, place.x, place.y, place.z)
-      const tag = `${cell.x},${cell.y},${cell.z}`
-      if (tag === lastCell.current) return
-      lastCell.current = tag
-      if (alt || s.tool === 'picker') s.pickAt(cell)
-      else s.paintAt(cell, erase || s.tool === 'eraser')
-    },
-    [],
-  )
+  const feed = useCallback((input: Input) => {
+    const { state, out } = step(gesture.current, input, ctxNow())
+    gesture.current = state
+    apply(out, input)
+  }, [apply])
 
   const rayPointOnDragPlane = useCallback(
     (ev: PointerEvent): THREE.Vector3 | null => {
       const plane = dragPlane.current
       if (!plane) return null
-      const rect = gl.domElement.getBoundingClientRect()
+      const rect = canvasEl.getBoundingClientRect()
       const ndc = new THREE.Vector2(
         ((ev.clientX - rect.left) / rect.width) * 2 - 1,
         -((ev.clientY - rect.top) / rect.height) * 2 + 1,
@@ -171,132 +219,146 @@ function Editor() {
       const hit = new THREE.Vector3()
       return raycaster.ray.intersectPlane(plane, hit) ? hit : null
     },
-    [camera, gl, raycaster],
+    [camera, canvasEl, raycaster],
   )
 
-  const endDrag = useCallback(() => {
-    dragPlane.current = null
-    lastCell.current = ''
-    if (controls) controls.enabled = true
-    useEditor.getState().endStroke()
-  }, [controls])
+  /**
+   * The pointer is captured during a drag, so later positions come from a
+   * synthetic hit on the frozen plane, resolved through the same
+   * `resolveCell` as a click so both agree on the cell.
+   */
+  const cellFromDragPlane = useCallback((p: THREE.Vector3): Cell | null => {
+    const s = useEditor.getState()
+    const n = dragNormal.current
+    const hit: Hit = {
+      kind: dragKind.current,
+      point: { x: p.x, y: p.y, z: p.z },
+      normal: { x: n.x, y: n.y, z: n.z },
+    }
+    const res = resolveCell(hit, dragMods.current, s.tool, s.world.dims)
+    pendingRes.current = res
+    return res.valid ? res.chosen : null
+  }, [])
 
-  const onDown = useCallback(
-    (e: ThreeEvent<PointerEvent>) => {
-      touchClock()
-      const mods = packMods(e)
-      const typeId = str(e.pointerType || 'mouse')
-      if (e.button !== 0) {
-        rec(EV.pointerDown, typeId, e.clientX, e.clientY, e.button, mods,
-          e.intersections?.length ?? NaN)
-        return
-      }
-      e.stopPropagation()
-      const s = useEditor.getState()
-      const gid = beginGesture()
-      void gid
-      rec(EV.pointerDown, typeId, e.clientX, e.clientY, e.button, mods,
-        e.intersections?.length ?? NaN)
-      // Ray hit and distance explain why preview and edit can resolve to
-      // different cells.
-      rec(EV.ray, str(e.object.name || e.object.type), e.point.x, e.point.y, e.point.z,
-        e.distance ?? NaN, e.intersections?.length ?? NaN)
-      rec(EV.gestureStart, typeId,
-        str(e.shiftKey ? 'erase' : s.tool === 'eraser' ? 'erase' : e.altKey ? 'pick' : 'place'),
-        mods)
-      const n = sliceMode
-        ? new THREE.Vector3(
-            s.sliceAxis === 'x' ? 1 : 0,
-            s.sliceAxis === 'y' ? 1 : 0,
-            s.sliceAxis === 'z' ? 1 : 0,
-          )
-        : worldNormal(e)
-      dragNormal.current = n
-      dragErase.current = e.shiftKey
-      dragPlane.current = new THREE.Plane().setFromNormalAndCoplanarPoint(n, e.point)
-      lastCell.current = ''
-      if (controls) controls.enabled = false
+  const onDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+    touchClock()
+    e.stopPropagation()
+    const s = useEditor.getState()
+    const hit = hitFrom(e)
+    const mods = modsOf(e)
+    const res = resolveCell(hit, mods, s.tool, s.world.dims)
+    pendingRes.current = res
+    lastHit.current = hit
+    dragMods.current = mods
+    dragKind.current = hit.kind
+    dragNormal.current.set(hit.normal.x, hit.normal.y, hit.normal.z)
+    dragPlane.current = new THREE.Plane().setFromNormalAndCoplanarPoint(dragNormal.current, e.point)
 
-      const dragTool = s.tool === 'brush' || s.tool === 'eraser'
-      if (dragTool) s.beginStroke()
+    beginGesture()
+    downPos.current = { x: e.clientX, y: e.clientY }
+    gestureT0.current = performance.now()
+    gestureCells.current = 0
 
-      applyAtPoint(e.point, n, e.shiftKey, e.altKey)
+    rec(EV.pointerDown, str(e.pointerType || 'mouse'), e.clientX, e.clientY, e.button,
+      packMods(e), e.intersections?.length ?? NaN)
+    // Ray hit and distance explain why preview and edit can resolve to
+    // different cells.
+    rec(EV.ray, str(hit.kind), e.point.x, e.point.y, e.point.z, e.distance ?? NaN,
+      e.intersections?.length ?? NaN)
+    // Both candidate cells: comparing chosen vs. the drawn cursor exposes
+    // off-by-one bugs.
+    rec(EV.rayCell,
+      res.target?.x ?? NaN, res.target?.y ?? NaN, res.target?.z ?? NaN,
+      res.placement?.x ?? NaN, res.placement?.y ?? NaN, res.placement?.z ?? NaN)
+    rec(EV.gestureStart, str(e.pointerType || 'mouse'), str(res.action), packMods(e))
 
-      const x0 = e.clientX
-      const y0 = e.clientY
-      const t0 = performance.now()
-      let cells = 0
-      const dist = (ev: PointerEvent) => Math.hypot(ev.clientX - x0, ev.clientY - y0)
+    feed({
+      kind: 'down',
+      pointerId: e.pointerId,
+      pointerType: e.pointerType || 'mouse',
+      button: e.button,
+      x: e.clientX,
+      y: e.clientY,
+      cell: res.valid ? res.chosen : null,
+      mods,
+    })
+  }, [feed, hitFrom])
 
-      const move = (ev: PointerEvent) => {
-        touchClock()
-        rec(EV.pointerMove, ev.clientX, ev.clientY, dist(ev), performance.now() - t0)
-        if (!dragTool) return
-        const p = rayPointOnDragPlane(ev)
-        if (p) {
-          const before = lastCell.current
-          applyAtPoint(p, dragNormal.current, dragErase.current, false)
-          if (lastCell.current !== before) cells++
-        }
-      }
-      const up = (ev: PointerEvent) => {
-        touchClock()
-        window.removeEventListener('pointermove', move)
-        window.removeEventListener('pointerup', up)
-        window.removeEventListener('pointercancel', cancelled)
-        const d = dist(ev)
-        const ms = performance.now() - t0
-        rec(EV.pointerUp, ev.clientX, ev.clientY, d, ms)
-        rec(EV.gestureEnd, str(d < 4 ? 'click' : 'drag'), ms, cells, d)
-        endGesture()
-        if (dragTool) endDrag()
-        else {
-          dragPlane.current = null
-          lastCell.current = ''
-          if (controls) controls.enabled = true
-        }
-      }
-      // Only observes: nothing clears the gesture on pointercancel, which is
-      // how orbit controls stay disabled forever.
-      const cancelled = (ev: PointerEvent) => {
-        touchClock()
-        rec(EV.pointerCancel, str(ev.pointerType || 'mouse'), performance.now() - t0)
-        rec(EV.gestureAborted, str('pointercancel-no-cleanup'), performance.now() - t0)
-        rec(EV.orbitEnabled, controls ? (controls.enabled ? 1 : 0) : NaN,
-          str('left-as-is-after-cancel'))
-      }
-      window.addEventListener('pointermove', move)
-      window.addEventListener('pointerup', up)
-      window.addEventListener('pointercancel', cancelled)
-    },
-    [applyAtPoint, controls, endDrag, rayPointOnDragPlane, sliceMode],
-  )
-
-  const onHover = useCallback(
-    (e: ThreeEvent<PointerEvent>) => {
-      touchClock()
-      const s = useEditor.getState()
-      if (s.sliceView !== 'off') {
-        const c = { x: Math.floor(e.point.x), y: Math.floor(e.point.y), z: Math.floor(e.point.z) }
-        rec(EV.hover, c.x, c.y, c.z, str('slice'))
-        s.setHover(c)
-        return
-      }
-      const n = worldNormal(e)
-      const erasing = s.tool === 'eraser'
-      const c = floorVec(e.point, n, erasing ? -1 : 1)
-      // `source` records which mesh raised the hover, so preview/edit
-      // mismatches are traceable.
-      rec(EV.hover, c.x, c.y, c.z, str(e.object.name || e.object.type))
-      s.setHover(c)
-    },
-    [],
-  )
+  const onHover = useCallback((e: ThreeEvent<PointerEvent>) => {
+    touchClock()
+    e.stopPropagation() // without this R3F fires it for every object the ray crosses
+    // Mid-gesture the cell comes from the frozen drag plane, not a fresh ray;
+    // R3F still raycasts while the pointer is captured, so this would else
+    // fight the drag's own resolution and make the cursor jump.
+    if (gesture.current.phase !== 'idle') return
+    const s = useEditor.getState()
+    const hit = hitFrom(e)
+    const res = resolveCell(hit, modsOf(e), s.tool, s.world.dims)
+    pendingRes.current = res
+    lastHit.current = hit
+    if (res.valid && res.chosen) {
+      rec(EV.hover, res.chosen.x, res.chosen.y, res.chosen.z, str(hit.kind))
+      s.setHover(res.chosen)
+    } else {
+      rec(EV.hoverNone)
+      s.setHover(null)
+    }
+  }, [hitFrom])
 
   const clearHover = useCallback(() => {
     rec(EV.hoverNone)
     useEditor.getState().setHover(null)
   }, [])
+
+  // Registered once: attaching them inside onDown, like the old code did,
+  // accumulated a new set of listeners on every click.
+  useEffect(() => {
+    const onMove = (ev: PointerEvent) => {
+      touchClock()
+      // Otherwise every orbit frame raycasts and overwrites pendingRes,
+      // making the preview jump while the camera moves.
+      if (gesture.current.phase !== 'pending' && gesture.current.phase !== 'painting') return
+      const p = rayPointOnDragPlane(ev)
+      const cell = p ? cellFromDragPlane(p) : null
+      if (cell) useEditor.getState().setHover(cell)
+      feed({ kind: 'move', x: ev.clientX, y: ev.clientY, cell })
+    }
+    const onUp = (ev: PointerEvent) => {
+      touchClock()
+      rec(EV.pointerUp, ev.clientX, ev.clientY,
+        Math.hypot(ev.clientX - downPos.current.x, ev.clientY - downPos.current.y),
+        performance.now() - gestureT0.current)
+      feed({ kind: 'up', x: ev.clientX, y: ev.clientY })
+      endGesture()
+    }
+    // Releasing capture on a normal up also fires lostpointercapture; skip
+    // the abort path when already idle so a plain click logs no false abort.
+    const abortIfActive = (kind: 'cancel' | 'lostCapture' | 'blur' | 'unmount') => {
+      if (gesture.current.phase === 'idle') return
+      feed({ kind })
+      endGesture()
+    }
+    const onCancel = (ev: PointerEvent) => {
+      rec(EV.pointerCancel, str(ev.pointerType || 'mouse'), performance.now() - gestureT0.current)
+      abortIfActive('cancel')
+    }
+    const onLost = () => abortIfActive('lostCapture')
+    const onBlur = () => abortIfActive('blur')
+
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onCancel)
+    window.addEventListener('blur', onBlur)
+    canvasEl.addEventListener('lostpointercapture', onLost)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onCancel)
+      window.removeEventListener('blur', onBlur)
+      canvasEl.removeEventListener('lostpointercapture', onLost)
+      abortIfActive('unmount')
+    }
+  }, [feed, canvasEl, rayPointOnDragPlane, cellFromDragPlane])
 
   const dims = store.world.dims
 
@@ -315,6 +377,7 @@ function Editor() {
         />
         {!sliceMode && (
           <mesh
+            name="build-plate"
             position={[dims.x / 2, 0, dims.z / 2]}
             rotation={[-Math.PI / 2, 0, 0]}
             receiveShadow
@@ -362,6 +425,9 @@ export function Scene() {
   const orbitRef = useRef<OrbitControlsImpl>(null)
   const center: [number, number, number] = [dims.x / 2, dims.y / 4, dims.z / 2]
   const dist = Math.max(dims.x, dims.z) * 1.15 + 8
+  // First framing only. As a live prop r3f re-applies it after every fit,
+  // which is why "Centrar" never centered: the fit target was overwritten.
+  const initialTarget = useRef(center)
 
   return (
     <Canvas
@@ -389,11 +455,16 @@ export function Scene() {
       <ViewFitter />
       <OrbitControls
         makeDefault
-        target={center}
+        target={initialTarget.current}
         enableDamping
         dampingFactor={0.12}
         maxDistance={2200}
         minDistance={2}
+        mouseButtons={{
+          LEFT: THREE.MOUSE.ROTATE,
+          MIDDLE: THREE.MOUSE.ROTATE,
+          RIGHT: THREE.MOUSE.PAN,
+        }}
         ref={orbitRef}
         onStart={() => rec(EV.orbitStart)}
         onEnd={() => rec(EV.orbitEnd)}

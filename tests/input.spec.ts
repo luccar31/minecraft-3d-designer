@@ -96,6 +96,59 @@ test('el cursor y la edición resuelven a la misma celda', async ({ page }) => {
   expect(written).toBe(true)
 })
 
+test('en modo capa, un click dibuja en la celda de la capa activa', async ({ page }) => {
+  await ready(page)
+  await page.evaluate(() => {
+    const s = window.__mcb.store.getState()
+    s.newDesign({ x: 16, y: 12, z: 16 }, 'Capa')
+    s.setSliceView('isolate')
+    s.setSliceIndex(3)
+    s.setTool('brush')
+  })
+  await page.waitForTimeout(400)
+  const box = (await page.locator('canvas').boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await page.waitForTimeout(200)
+
+  const ys = await page.evaluate(() => {
+    const w = window.__mcb.store.getState().world
+    return [...w.voxels.keys()].map((k) => (k >>> 10) & 1023)
+  })
+  expect(ys.length).toBeGreaterThan(0)
+  expect(new Set(ys)).toEqual(new Set([3]))
+})
+
+test('en modo capa, la línea necesita dos clicks y usa el ancla', async ({ page }) => {
+  await ready(page)
+  await page.evaluate(() => {
+    const s = window.__mcb.store.getState()
+    s.newDesign({ x: 16, y: 12, z: 16 }, 'Línea')
+    s.setSliceView('isolate')
+    s.setSliceIndex(2)
+    s.setTool('line')
+  })
+  await page.waitForTimeout(400)
+  const box = (await page.locator('canvas').boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+
+  await page.mouse.click(cx - 60, cy)
+  await page.waitForTimeout(150)
+  const afterFirst = await page.evaluate(() => ({
+    anchor: window.__mcb.store.getState().anchor,
+    size: window.__mcb.store.getState().world.size,
+  }))
+
+  await page.mouse.click(cx + 60, cy)
+  await page.waitForTimeout(200)
+  const afterSecond = await count(page)
+
+  // The first click only drops the anchor; the second draws the run.
+  expect(afterFirst.anchor).not.toBeNull()
+  expect(afterFirst.size).toBe(0)
+  expect(afterSecond).toBeGreaterThan(1)
+})
+
 test('la goma sobre el piso vacío no apunta debajo de la grilla', async ({ page }) => {
   await ready(page)
   await page.evaluate(() => {

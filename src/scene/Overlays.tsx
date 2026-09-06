@@ -85,6 +85,7 @@ export function SlicePlane({
 
   return (
     <mesh
+      name="slice-plane"
       position={position}
       rotation={rotation}
       onPointerDown={onDown}
