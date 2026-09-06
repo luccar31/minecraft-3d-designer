@@ -990,7 +990,7 @@ git commit -m "feat(ui): first-run drawing mode choice for touch"
 /* ── 600–1023: viewport a todo el ancho, paneles en hojas ────────────────── */
 @media (max-width: 1023px) {
   .main { grid-template-columns: 1fr; }
-  .main > .palette, .main > .tools { display: none; }
+  .main > .side { display: none; }
 }
 
 /* ── <600: además, barra inferior ────────────────────────────────────────── */
@@ -1002,8 +1002,8 @@ git commit -m "feat(ui): first-run drawing mode choice for touch"
 
 /* ── entrada gruesa: blancos grandes, sin depender del ancho ─────────────── */
 @media (pointer: coarse) {
-  button, .chip, input, select { min-height: 44px; }
-  .palette-grid button { min-width: 44px; min-height: 44px; }
+  button, .chip, input, select { min-height: 44px; min-width: 44px; }
+  .blocks button { min-width: 44px; min-height: 44px; }
   canvas { touch-action: none; }
   /* Sin puntero no hay hover: el estado tiene que verse sin él. */
   .chip.on, button.on { outline: 1px solid var(--accent); }
@@ -1299,7 +1299,7 @@ test.describe('celular', () => {
   test('muestra la barra inferior y oculta las columnas', async ({ page }) => {
     await ready(page)
     await expect(page.getByTestId('bottom-bar')).toBeVisible()
-    await expect(page.locator('.main > .palette')).toBeHidden()
+    await expect(page.locator('.main > .side').first()).toBeHidden()
   })
 
   test('no hay scroll horizontal', async ({ page }) => {
@@ -1340,7 +1340,7 @@ test.describe('escritorio', () => {
 
   test('conserva las tres columnas y no muestra la barra', async ({ page }) => {
     await ready(page)
-    await expect(page.locator('.main > .palette')).toBeVisible()
+    await expect(page.locator('.main > .side').first()).toBeVisible()
     await expect(page.getByTestId('bottom-bar')).toBeHidden()
   })
 })
