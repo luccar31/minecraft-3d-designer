@@ -1,0 +1,49 @@
+/* ── panel de atajos ─────────────────────────────────────────────────── */
+
+.sc-modal { width: min(760px, 100%); }
+
+.sc-search { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sc-search input { flex: 1; }
+.sc-search .label { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.sc-gaps {
+  margin: 0 0 12px;
+  padding: 6px 9px;
+  border: 1px solid #5a4a1e;
+  border-radius: 7px;
+  background: #2a2413;
+  color: #e2b04a;
+  font-size: 11.5px;
+}
+
+.sc-group { margin-bottom: 14px; }
+
+.sc-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.sc-row:last-child { border-bottom: none; }
+
+.sc-keys { display: flex; flex-wrap: wrap; gap: 4px; }
+.sc-keys .kbd { font-size: 11px; padding: 2px 6px; white-space: nowrap; }
+
+.sc-desc { font-size: 12.5px; }
+
+.sc-gap {
+  margin-left: 7px;
+  padding: 1px 6px;
+  border: 1px dashed #5a4a1e;
+  border-radius: 999px;
+  color: #e2b04a;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* Narrow screens: the keys stack over the description instead of squeezing. */
+@media (max-width: 560px) {
+  .sc-row { grid-template-columns: 1fr; gap: 2px; }
+}
