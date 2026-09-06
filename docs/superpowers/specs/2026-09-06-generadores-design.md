@@ -95,7 +95,7 @@ mudas.
 | Cúpula / esfera | 2 | no | material, media o entera |
 | Techo a dos aguas | 2 | no | material, pendiente, alero |
 | Techo plano | 1 | no | material, alero |
-| Rampa | 2 | no | material, ancho, escalón |
+| Rampa | 2 | no | material, escalón |
 | Reemplazar | 1 | **sí** | de → a |
 | Vaciar | 1 | **sí** | — |
 | Cubrir | 1 | **sí** | material |
