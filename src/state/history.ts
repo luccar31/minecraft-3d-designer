@@ -1,3 +1,4 @@
+import { EV, rec, str } from '../debug'
 import type { CellDelta } from '../types'
 import type { World } from '../voxel/world'
 
@@ -13,10 +14,17 @@ export class History {
 
   push(deltas: CellDelta[]) {
     if (deltas.length === 0) return
+    const futuroPerdido = this.future.length
     this.past.push(deltas)
-    if (this.past.length > DEPTH) this.past.shift()
+    // Pasado el tope, la entrada más vieja deja de poder deshacerse. Antes esto
+    // ocurría en silencio y el usuario sólo notaba que el undo "no llegaba".
+    const podado = this.past.length > DEPTH
+    if (podado) this.past.shift()
     this.future.length = 0
+    if (podado || futuroPerdido) rec(EV.historialPodado, podado ? DEPTH : NaN, futuroPerdido)
   }
+
+  get depth() { return this.past.length }
 
   undo(world: World): boolean {
     const d = this.past.pop()
@@ -34,7 +42,10 @@ export class History {
     return true
   }
 
-  clear() {
+  clear(motivo = 'sin-motivo') {
+    if (this.past.length || this.future.length) {
+      rec(EV.historialLimpiado, this.past.length, this.future.length, str(motivo))
+    }
     this.past.length = 0
     this.future.length = 0
   }

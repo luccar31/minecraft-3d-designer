@@ -1,3 +1,4 @@
+import { EV, rec, str } from '../debug'
 import type { BlockId, DesignMeta } from '../types'
 import { blockDef } from '../blocks/palette'
 import type { World } from '../voxel/world'
@@ -52,12 +53,16 @@ function sameGrid(a: LayerGrid, b: LayerGrid): boolean {
  *    Una torre de 20 niveles iguales pasa de 20 pasos a 1.
  */
 export function buildGuide(world: World): Guide {
+  const __t0 = performance.now()
   const b = world.bounds()
   const empty: Guide = {
     steps: [], legend: new Map(), totals: [], totalBlocks: 0,
     width: 0, depth: 0, originX: 0, originZ: 0, height: 0,
   }
-  if (!b) return empty
+  if (!b) {
+    rec(EV.medicion, str('buildGuide/vacio'), performance.now() - __t0)
+    return empty
+  }
 
   const [minX, minY, minZ] = b.min
   const [maxX, maxY, maxZ] = b.max
@@ -120,6 +125,8 @@ export function buildGuide(world: World): Guide {
   const sortedTotals = [...totals.entries()].sort((a, c) => c[1] - a[1])
   const legend = new Map<BlockId, string>()
   sortedTotals.forEach(([id], i) => legend.set(id, codeFor(i)))
+
+  rec(EV.medicion, str('buildGuide'), performance.now() - __t0)
 
   return {
     steps,
@@ -299,9 +306,14 @@ export function guideToHtml(guide: Guide, meta: DesignMeta): string {
 }
 
 export function openPrintableGuide(guide: Guide, meta: DesignMeta) {
+  const t0 = performance.now()
   const html = guideToHtml(guide, meta)
   const blob = new Blob([html], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
-  window.open(url, '_blank', 'noopener')
+  const ventana = window.open(url, '_blank', 'noopener')
+  // Si el bloqueador de popups actúa, window.open devuelve null y hasta ahora
+  // el botón simplemente no hacía nada: sin error, sin aviso, sin registro.
+  if (!ventana) rec(EV.popupBloqueado, str('guia-imprimible'))
+  rec(EV.exportar, str('guia-html'), html.length, performance.now() - t0)
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }

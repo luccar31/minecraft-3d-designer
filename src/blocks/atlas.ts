@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { EV, rec } from '../debug'
 import { BLOCKS, type TexSpec } from './palette'
 
 export const TILE = 32
@@ -324,6 +325,7 @@ let cached: THREE.CanvasTexture | null = null
 
 export function getAtlasTexture(): THREE.CanvasTexture {
   if (cached) return cached
+  const __t0 = performance.now()
   const canvas = document.createElement('canvas')
   canvas.width = ATLAS_PX
   canvas.height = ATLAS_PX
@@ -344,6 +346,7 @@ export function getAtlasTexture(): THREE.CanvasTexture {
   tex.generateMipmaps = false
   tex.colorSpace = THREE.SRGBColorSpace
   tex.needsUpdate = true
+  rec(EV.atlas, performance.now() - __t0, specs.length)
   cached = tex
   return tex
 }

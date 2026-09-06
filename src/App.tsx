@@ -1,13 +1,14 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { Scene } from './scene/Scene'
 import { PalettePanel } from './ui/PalettePanel'
 import { ToolPanel } from './ui/ToolPanel'
 import { TopBar } from './ui/TopBar'
 import { DesignsPanel } from './ui/DesignsPanel'
-import { GuideView } from './ui/GuideView'
+import { DebugPanel } from './ui/DebugPanel'
 import { useEditor } from './state/store'
 import { hasWebGL } from './ui/ErrorBoundary'
 import { worldToPlane } from './voxel/ops'
+import { EV, packMods, rec, str, touchClock } from './debug'
 import type { Tool } from './types'
 
 const TOOL_KEYS: Record<string, Tool> = {
@@ -16,8 +17,15 @@ const TOOL_KEYS: Record<string, Tool> = {
 
 const WEBGL = hasWebGL()
 
+// La guía no toca three.js: se carga recién cuando se entra a verla, así el
+// editor no paga su peso en el arranque.
+const GuideView = lazy(() =>
+  import('./ui/GuideView').then((m) => ({ default: m.GuideView })),
+)
+
 export default function App() {
   const [designsOpen, setDesignsOpen] = useState(false)
+  const [debugOpen, setDebugOpen] = useState(false)
   const view = useEditor((s) => s.view)
   const status = useEditor((s) => s.status)
   const meta = useEditor((s) => s.meta)
@@ -31,10 +39,25 @@ export default function App() {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      touchClock()
       const el = e.target as HTMLElement | null
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+        rec(EV.teclaIgnorada, str(e.key), str('foco-en-campo'))
+        return
+      }
       const s = useEditor.getState()
       const mod = e.ctrlKey || e.metaKey
+
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault()
+        setDebugOpen((v) => {
+          rec(EV.panel, str('telemetria'), v ? 0 : 1)
+          return !v
+        })
+        return
+      }
+
+      rec(EV.tecla, str(e.key), packMods(e), e.repeat ? 1 : 0)
 
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()
@@ -126,7 +149,17 @@ export default function App() {
           <ToolPanel />
         </div>
       ) : (
-        <GuideView />
+        <Suspense
+          fallback={
+            <div className="guide">
+              <div className="hint" style={{ margin: '60px auto', maxWidth: 460 }}>
+                Preparando la guía…
+              </div>
+            </div>
+          }
+        >
+          <GuideView />
+        </Suspense>
       )}
 
       <footer className="status">
@@ -146,6 +179,7 @@ export default function App() {
       </footer>
 
       {designsOpen && <DesignsPanel onClose={() => setDesignsOpen(false)} />}
+      {debugOpen && <DebugPanel onClose={() => setDebugOpen(false)} />}
     </div>
   )
 }

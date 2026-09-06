@@ -6,6 +6,7 @@ import { useEditor } from './state/store'
 import { buildSchem } from './export/schem'
 import { buildGuide } from './export/guide'
 import { ErrorBoundary } from './ui/ErrorBoundary'
+import * as telemetria from './debug'
 
 // Superficie de automatización: la usan los tests end-to-end y sirve para
 // depurar desde la consola. No expone nada que la UI no exponga ya.
@@ -15,10 +16,13 @@ declare global {
       store: typeof useEditor
       buildSchem: typeof buildSchem
       buildGuide: typeof buildGuide
+      tel: typeof telemetria
     }
   }
 }
-window.__mcb = { store: useEditor, buildSchem, buildGuide }
+window.__mcb = { store: useEditor, buildSchem, buildGuide, tel: telemetria }
+
+telemetria.iniciarTelemetria()
 
 const rootEl = document.getElementById('root')
 

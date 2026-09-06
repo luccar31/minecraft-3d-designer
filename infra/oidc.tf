@@ -5,9 +5,9 @@
 data "aws_caller_identity" "current" {}
 
 resource "aws_iam_openid_connect_provider" "github" {
-  count           = var.create_oidc_provider ? 1 : 0
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
+  count          = var.create_oidc_provider ? 1 : 0
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
   # AWS ya valida la cadena de confianza; la huella queda por compatibilidad.
   thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
 }
@@ -53,8 +53,8 @@ resource "aws_iam_role" "deploy" {
 
 data "aws_iam_policy_document" "deploy" {
   statement {
-    sid     = "ListBucket"
-    actions = ["s3:ListBucket"]
+    sid       = "ListBucket"
+    actions   = ["s3:ListBucket"]
     resources = [aws_s3_bucket.site.arn]
   }
 

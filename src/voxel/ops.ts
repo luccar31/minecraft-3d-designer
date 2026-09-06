@@ -1,3 +1,4 @@
+import { EV, rec, str } from '../debug'
 import type { Axis, BlockId, Dims, Slice, Vec3 } from '../types'
 
 export type UV = { u: number; v: number }
@@ -50,7 +51,14 @@ export function linePoints(u0: number, v0: number, u1: number, v1: number): UV[]
   const sx = u0 < u1 ? 1 : -1
   const sy = v0 < v1 ? 1 : -1
   let err = dx + dy
-  for (;;) {
+  // Cota dura: sin ella, un NaN en cualquier extremo hace que este bucle no
+  // termine nunca y cuelgue la pestaña sin dejar ni un evento.
+  const tope = dx + Math.abs(dy) + 2
+  for (let i = 0; ; i++) {
+    if (i > tope) {
+      rec(EV.limiteAlcanzado, str('linePoints'), tope)
+      break
+    }
     out.push({ u: x, v: y })
     if (x === u1 && y === v1) break
     const e2 = 2 * err
@@ -64,6 +72,8 @@ export function rectPoints(u0: number, v0: number, u1: number, v1: number, fille
   const uMin = Math.min(u0, u1), uMax = Math.max(u0, u1)
   const vMin = Math.min(v0, v1), vMax = Math.max(v0, v1)
   const out: UV[] = []
+  const celdas = (uMax - uMin + 1) * (vMax - vMin + 1)
+  if (celdas > 65536) rec(EV.limiteAlcanzado, str('rectPoints'), celdas)
   for (let u = uMin; u <= uMax; u++) {
     for (let v = vMin; v <= vMax; v++) {
       const edge = u === uMin || u === uMax || v === vMin || v === vMax
@@ -97,6 +107,9 @@ export function floodFill(
     out.push(p)
     stack.push({ u: p.u + 1, v: p.v }, { u: p.u - 1, v: p.v }, { u: p.u, v: p.v + 1 }, { u: p.u, v: p.v - 1 })
   }
+  // Topearse deja el relleno incompleto: el usuario ve un resultado a medias y
+  // hasta ahora no había forma de saber que se había topeado.
+  if (out.length >= limit) rec(EV.limiteAlcanzado, str('floodFill'), limit)
   return out
 }
 

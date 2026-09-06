@@ -1,3 +1,4 @@
+import { EV, rec, str } from '../debug'
 import pako from 'pako'
 import { keyX, keyY, keyZ } from '../types'
 import type { DesignMeta } from '../types'
@@ -14,6 +15,7 @@ const DATA_VERSION = 3465
  * pegado en el juego no arrastra aire de más.
  */
 export function buildSchem(world: World, meta: DesignMeta): Uint8Array {
+  const __t0 = performance.now()
   const b = world.bounds()
   const [minX, minY, minZ] = b ? b.min : [0, 0, 0]
   const [maxX, maxY, maxZ] = b ? b.max : [0, 0, 0]
@@ -68,5 +70,9 @@ export function buildSchem(world: World, meta: DesignMeta): Uint8Array {
     },
   }
 
-  return pako.gzip(writeNamedCompound('Schematic', root))
+  const salida = pako.gzip(writeNamedCompound('Schematic', root))
+  // Es la operación más pesada de la app y corre en el hilo principal: si la
+  // pestaña se congela al exportar, acá queda el tamaño y el tiempo.
+  rec(EV.exportar, str('schem'), salida.length, performance.now() - __t0)
+  return salida
 }

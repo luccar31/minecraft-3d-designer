@@ -1,3 +1,4 @@
+import { EV, rec, str } from '../debug'
 import type { BlockId } from '../types'
 
 export type Pattern =
@@ -145,9 +146,18 @@ export const BLOCK_BY_ID = new Map<BlockId, BlockDef>(BLOCKS.map((b) => [b.id, b
 
 export const AIR = 'minecraft:air'
 
+const avisados = new Set<string>()
+
 export function blockDef(id: BlockId): BlockDef {
   const b = BLOCK_BY_ID.get(id)
   if (b) return b
+  // Un id desconocido se pinta magenta y se exporta igual al .schem. Antes eso
+  // pasaba mudo: un diseño de otra versión quedaba todo magenta sin explicación.
+  // Se avisa una vez por id, porque esto se llama por cada cara de cada bloque.
+  if (!avisados.has(id)) {
+    avisados.add(id)
+    rec(EV.bloqueDesconocido, str(id))
+  }
   return { id, name: id.replace('minecraft:', ''), category: 'piedra', color: '#b455ff', tex: uni({ pattern: 'solid', color: '#b455ff' }) }
 }
 

@@ -1,3 +1,4 @@
+import { EV, rec, str } from '../debug'
 import { CHUNK, packKey, keyX, keyY, keyZ } from '../types'
 import type { BlockId, CellDelta, Dims, VoxelKey } from '../types'
 
@@ -22,6 +23,8 @@ const chunkOf = (x: number, y: number, z: number) =>
 export class World {
   dims: Dims
   readonly voxels = new Map<VoxelKey, BlockId>()
+  /** Contador acumulado de escrituras que cayeron fuera de la grilla. */
+  outOfBounds = 0
   private readonly chunkCells = new Map<ChunkKey, Set<VoxelKey>>()
   private readonly versions = new Map<ChunkKey, number>()
   private readonly chunkSubs = new Map<ChunkKey, Set<() => void>>()
@@ -57,7 +60,13 @@ export class World {
 
   /** Escribe una celda. Devuelve el delta, o null si no cambió nada. */
   set(x: number, y: number, z: number, id: BlockId | undefined): CellDelta | null {
-    if (!this.inBounds(x, y, z)) return null
+    if (!this.inBounds(x, y, z)) {
+      // Pegar o espejar produce rutinariamente celdas fuera de rango: se
+      // descartaban en silencio y el usuario veía "pegué 200 y entraron 40".
+      this.outOfBounds++
+      rec(EV.fueraDeLimites, x, y, z, str('world.set'))
+      return null
+    }
     const key = packKey(x, y, z)
     const prev = this.voxels.get(key)
     if (prev === id) return null
@@ -99,9 +108,13 @@ export class World {
 
   applyDeltas(deltas: CellDelta[], direction: 'redo' | 'undo') {
     this.beginBatch()
+    let fuera = 0
     for (const d of deltas) {
+      // Un delta anterior a un resize puede caer fuera del volumen actual.
+      if (!this.inBounds(keyX(d.key), keyY(d.key), keyZ(d.key))) { fuera++; continue }
       this.writeKey(d.key, direction === 'redo' ? d.next : d.prev)
     }
+    if (fuera) rec(EV.descartado, str('applyDeltas'), fuera, deltas.length)
     this.endBatch()
   }
 
@@ -121,10 +134,12 @@ export class World {
   }
 
   resize(dims: Dims) {
+    const antes = this.voxels.size
     const kept: [VoxelKey, BlockId][] = []
     for (const [k, id] of this.voxels) {
       if (keyX(k) < dims.x && keyY(k) < dims.y && keyZ(k) < dims.z) kept.push([k, id])
     }
+    if (antes - kept.length > 0) rec(EV.descartado, str('resize'), antes - kept.length, antes)
     this.replaceAll(kept, dims)
   }
 
@@ -135,6 +150,12 @@ export class World {
   }
 
   endBatch() {
+    if (this.batching === 0) {
+      // Un endBatch de más dejaba el contador negativo y markDirty se apagaba
+      // para siempre: la escena quedaba congelada sin ningún error.
+      rec(EV.invariante, NaN)
+      return
+    }
     if (--this.batching > 0) return
     for (const ck of this.pendingDirty) {
       this.versions.set(ck, (this.versions.get(ck) ?? 0) + 1)

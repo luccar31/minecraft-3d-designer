@@ -1,3 +1,4 @@
+import { EV, recObj } from '../debug'
 import type { DesignSummary } from '../types'
 import type { DesignStore } from './types'
 import { isStoredDesign } from './codec'
@@ -9,7 +10,10 @@ function readIndex(): DesignSummary[] {
   try {
     const raw = localStorage.getItem(INDEX)
     return raw ? (JSON.parse(raw) as DesignSummary[]) : []
-  } catch {
+  } catch (e) {
+    // Antes esto presentaba un localStorage corrupto como 'no tenés diseños':
+    // pérdida de datos disfrazada de estado normal.
+    recObj(EV.fallo, { donde: 'local.readIndex', mensaje: (e as Error).message })
     return []
   }
 }

@@ -1,3 +1,4 @@
+import { EV, recObj } from '../debug'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 
 type Props = { children: ReactNode }
@@ -17,6 +18,14 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ info: info.componentStack ?? '' })
+    // Sin esto, el único registro que el usuario puede exportar era justamente
+    // el que no contenía el crash.
+    recObj(EV.excepcion, {
+      donde: 'ErrorBoundary',
+      mensaje: error.message,
+      stack: error.stack?.slice(0, 1200),
+      componentes: info.componentStack?.slice(0, 1200),
+    })
     console.error('[MC Blueprint]', error, info)
   }
 

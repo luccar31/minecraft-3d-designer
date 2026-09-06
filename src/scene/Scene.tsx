@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
+import { addAfterEffect, addEffect, Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
+import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
 import * as THREE from 'three'
 import { useEditor } from '../state/store'
 import { getAtlasTexture } from '../blocks/atlas'
 import { Chunks } from './Chunks'
 import { AnchorMarker, Cursor, GhostSlice, GridBounds, SelectionBox, SlicePlane } from './Overlays'
 import { worldToPlane } from '../voxel/ops'
+import {
+  attachRenderer, beginGesture, endGesture, EV, packMods, rec, startFrames, str,
+  touchClock, watchCanvas,
+} from '../debug'
 import type { Vec3 } from '../types'
 
 const NORMAL_MATRIX = new THREE.Matrix3()
@@ -141,6 +146,9 @@ function Editor() {
       const target = floorVec(p, n, -1)
       const place = floorVec(p, n, 1)
       const cell = erase || alt || s.tool === 'eraser' || s.tool === 'picker' ? target : place
+      // Las dos celdas candidatas, juntas: comparar cuál se eligió contra cuál
+      // dibuja el cursor es lo que hace visible un off-by-one.
+      rec(EV.rayoCelda, target.x, target.y, target.z, place.x, place.y, place.z)
       const tag = `${cell.x},${cell.y},${cell.z}`
       if (tag === lastCell.current) return
       lastCell.current = tag
@@ -175,9 +183,27 @@ function Editor() {
 
   const onDown = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
-      if (e.button !== 0) return
+      touchClock()
+      const mods = packMods(e)
+      const tipoId = str(e.pointerType || 'mouse')
+      if (e.button !== 0) {
+        rec(EV.punteroDown, tipoId, e.clientX, e.clientY, e.button, mods,
+          e.intersections?.length ?? NaN)
+        return
+      }
       e.stopPropagation()
       const s = useEditor.getState()
+      const gid = beginGesture()
+      void gid
+      rec(EV.punteroDown, tipoId, e.clientX, e.clientY, e.button, mods,
+        e.intersections?.length ?? NaN)
+      // Qué tocó el rayo y a qué distancia: es lo que explica que el preview y
+      // la edición puedan resolver a celdas distintas.
+      rec(EV.rayo, str(e.object.name || e.object.type), e.point.x, e.point.y, e.point.z,
+        e.distance ?? NaN, e.intersections?.length ?? NaN)
+      rec(EV.gestoInicio, tipoId,
+        str(e.shiftKey ? 'borrar' : s.tool === 'eraser' ? 'borrar' : e.altKey ? 'elegir' : 'colocar'),
+        mods)
       const n = sliceMode
         ? new THREE.Vector3(
             s.sliceAxis === 'x' ? 1 : 0,
@@ -196,14 +222,33 @@ function Editor() {
 
       applyAtPoint(e.point, n, e.shiftKey, e.altKey)
 
+      const x0 = e.clientX
+      const y0 = e.clientY
+      const t0 = performance.now()
+      let celdas = 0
+      const dist = (ev: PointerEvent) => Math.hypot(ev.clientX - x0, ev.clientY - y0)
+
       const move = (ev: PointerEvent) => {
+        touchClock()
+        rec(EV.punteroMove, ev.clientX, ev.clientY, dist(ev), performance.now() - t0)
         if (!dragTool) return
         const p = rayPointOnDragPlane(ev)
-        if (p) applyAtPoint(p, dragNormal.current, dragErase.current, false)
+        if (p) {
+          const antes = lastCell.current
+          applyAtPoint(p, dragNormal.current, dragErase.current, false)
+          if (lastCell.current !== antes) celdas++
+        }
       }
-      const up = () => {
+      const up = (ev: PointerEvent) => {
+        touchClock()
         window.removeEventListener('pointermove', move)
         window.removeEventListener('pointerup', up)
+        window.removeEventListener('pointercancel', cancelled)
+        const d = dist(ev)
+        const ms = performance.now() - t0
+        rec(EV.punteroUp, ev.clientX, ev.clientY, d, ms)
+        rec(EV.gestoFin, str(d < 4 ? 'click' : 'arrastre'), ms, celdas, d)
+        endGesture()
         if (dragTool) endDrag()
         else {
           dragPlane.current = null
@@ -211,27 +256,47 @@ function Editor() {
           if (controls) controls.enabled = true
         }
       }
+      // Sólo observa: hoy nadie limpia el gesto si el puntero se cancela, y ese
+      // es justamente el camino por el que la órbita queda apagada para siempre.
+      const cancelled = (ev: PointerEvent) => {
+        touchClock()
+        rec(EV.punteroCancel, str(ev.pointerType || 'mouse'), performance.now() - t0)
+        rec(EV.gestoAbortado, str('pointercancel-sin-limpieza'), performance.now() - t0)
+        rec(EV.orbitHabilitado, controls ? (controls.enabled ? 1 : 0) : NaN,
+          str('quedo-asi-tras-cancel'))
+      }
       window.addEventListener('pointermove', move)
       window.addEventListener('pointerup', up)
+      window.addEventListener('pointercancel', cancelled)
     },
     [applyAtPoint, controls, endDrag, rayPointOnDragPlane, sliceMode],
   )
 
   const onHover = useCallback(
     (e: ThreeEvent<PointerEvent>) => {
+      touchClock()
       const s = useEditor.getState()
       if (s.sliceView !== 'off') {
-        s.setHover({ x: Math.floor(e.point.x), y: Math.floor(e.point.y), z: Math.floor(e.point.z) })
+        const c = { x: Math.floor(e.point.x), y: Math.floor(e.point.y), z: Math.floor(e.point.z) }
+        rec(EV.hover, c.x, c.y, c.z, str('slice'))
+        s.setHover(c)
         return
       }
       const n = worldNormal(e)
       const erasing = s.tool === 'eraser'
-      s.setHover(floorVec(e.point, n, erasing ? -1 : 1))
+      const c = floorVec(e.point, n, erasing ? -1 : 1)
+      // `fuente` registra de qué objeto salió este hover. Cuando el preview y la
+      // edición discrepan, acá se ve que vinieron de mallas distintas.
+      rec(EV.hover, c.x, c.y, c.z, str(e.object.name || e.object.type))
+      s.setHover(c)
     },
     [],
   )
 
-  const clearHover = useCallback(() => useEditor.getState().setHover(null), [])
+  const clearHover = useCallback(() => {
+    rec(EV.hoverNulo)
+    useEditor.getState().setHover(null)
+  }, [])
 
   const dims = store.world.dims
 
@@ -294,6 +359,7 @@ function Editor() {
 export function Scene() {
   const dims = useEditor((s) => s.world.dims)
   const cancel = useEditor((s) => s.cancelAnchor)
+  const orbitRef = useRef<OrbitControlsImpl>(null)
   const center: [number, number, number] = [dims.x / 2, dims.y / 4, dims.z / 2]
   const dist = Math.max(dims.x, dims.z) * 1.15 + 8
 
@@ -304,8 +370,16 @@ export function Scene() {
       camera={{ position: [center[0] + dist * 0.7, dims.y + dist * 0.5, center[2] + dist * 0.8], fov: 48, far: 4000 }}
       onCreated={({ gl }) => {
         gl.localClippingEnabled = true
+        attachRenderer(gl)
+        watchCanvas(gl.domElement)
+        // Los contadores por frame se leen enganchándose al loop de r3f, que es
+        // el único punto donde `renderer.info` ya corresponde a este frame.
+        startFrames(addEffect, addAfterEffect)
       }}
-      onPointerMissed={() => cancel()}
+      onPointerMissed={(e) => {
+        rec(EV.punteroSinObjetivo, (e as PointerEvent).clientX, (e as PointerEvent).clientY)
+        cancel()
+      }}
       onContextMenu={(e) => e.preventDefault()}
       data-testid="scene-canvas"
     >
@@ -320,6 +394,18 @@ export function Scene() {
         dampingFactor={0.12}
         maxDistance={2200}
         minDistance={2}
+        ref={orbitRef}
+        onStart={() => rec(EV.orbitInicio)}
+        onEnd={() => rec(EV.orbitFin)}
+        onChange={() => {
+          // El payload de 'change' sólo trae { type, target } y `target` se
+          // anula al terminar el dispatch: se lee del ref, no del evento.
+          const c = orbitRef.current
+          if (!c) return
+          const p = c.object.position
+          const t = c.target
+          rec(EV.camaraPose, p.x, p.y, p.z, t.x, t.y, t.z)
+        }}
       />
     </Canvas>
   )

@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { CHUNK, keyX, keyY, keyZ } from '../types'
 import { blockDef, isTransparent } from '../blocks/palette'
 import { slotOf, slotUV } from '../blocks/atlas'
+import { EV, rec } from '../debug'
 import type { World, ChunkKey } from './world'
 import { chunkX, chunkY, chunkZ } from './world'
 
@@ -127,6 +128,7 @@ function faceVisible(self: string, neighbour: string | undefined): boolean {
 }
 
 export function buildChunkGeometry(world: World, ck: ChunkKey): ChunkGeometry {
+  const t0 = performance.now()
   const cells = world.cellsOf(ck)
   if (!cells || cells.size === 0) return { opaque: null, transparent: null }
 
@@ -195,6 +197,10 @@ export function buildChunkGeometry(world: World, ck: ChunkKey): ChunkGeometry {
       target.n += 4
     }
   }
+
+  // Reconstruir un chunk es la operación que decide si colocar un bloque se
+  // siente instantáneo: se mide siempre, no sólo cuando algo va mal.
+  rec(EV.remesh, ck, cells.size, performance.now() - t0, opaque.n, trans.n)
 
   return { opaque: toGeometry(opaque), transparent: toGeometry(trans) }
 }

@@ -1,3 +1,4 @@
+import { EV, rec, str } from '../debug'
 import pako from 'pako'
 import type { BlockId, DesignMeta, StoredDesign, VoxelKey } from '../types'
 import type { World } from '../voxel/world'
@@ -26,6 +27,7 @@ function fromBase64(b64: string): Uint8Array {
  * paleta es chica, así que comprime muy bien (100k bloques ≈ 40 KB).
  */
 export function serializeDesign(meta: DesignMeta, world: World): StoredDesign {
+  const __t0 = performance.now()
   const palette: BlockId[] = []
   const index = new Map<BlockId, number>()
   const keys = [...world.voxels.keys()].sort((a, b) => a - b)
@@ -46,6 +48,12 @@ export function serializeDesign(meta: DesignMeta, world: World): StoredDesign {
     off += 6
   }
 
+  const data = toBase64(pako.gzip(new Uint8Array(buf)))
+  rec(
+    EV.codec, str('serializar'), performance.now() - __t0,
+    buf.byteLength, data.length, keys.length,
+  )
+
   return {
     v: 1,
     id: meta.id,
@@ -53,7 +61,7 @@ export function serializeDesign(meta: DesignMeta, world: World): StoredDesign {
     description: meta.description,
     dims: meta.dims,
     palette,
-    data: toBase64(pako.gzip(new Uint8Array(buf))),
+    data,
     blockCount: keys.length,
     createdAt: meta.createdAt,
     updatedAt: new Date().toISOString(),
@@ -64,15 +72,23 @@ export function deserializeDesign(sd: StoredDesign): {
   meta: DesignMeta
   entries: [VoxelKey, BlockId][]
 } {
+  const t0 = performance.now()
   const raw = pako.ungzip(fromBase64(sd.data))
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength)
   const entries: [VoxelKey, BlockId][] = []
+  let sinPaleta = 0
   for (let off = 0; off + 6 <= raw.byteLength; off += 6) {
     const key = view.getUint32(off, true)
     const pi = view.getUint16(off + 4, true)
     const id = sd.palette[pi]
+    // Una celda cuyo índice de paleta no existe desaparecía muda: bloques que
+    // se esfuman al abrir un diseño, sin nada que consultar.
     if (id) entries.push([key, id])
+    else sinPaleta++
   }
+  const total = Math.floor(raw.byteLength / 6)
+  if (sinPaleta) rec(EV.descartado, str('deserializar/paleta'), sinPaleta, total)
+  rec(EV.codec, str('deserializar'), performance.now() - t0, raw.byteLength, sd.data.length, entries.length)
   return {
     meta: {
       id: sd.id,
