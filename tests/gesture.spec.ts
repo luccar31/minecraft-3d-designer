@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { initialState, step, type Cell, type Ctx, type Input, type Mods } from '../src/scene/gesture'
+import { resolveCell, type Hit } from '../src/scene/picking'
 
 const NO_MODS: Mods = { shift: false, alt: false, ctrl: false, meta: false }
 const BUILD: Ctx = { mode: 'build', dragTool: true }
@@ -176,4 +177,61 @@ test('soltar tras navegar vuelve a idle sin escribir', () => {
   expect(b.state.phase).toBe('idle')
   expect(b.out.commit).toBeUndefined()
   expect(b.out.classified).toBe('camera')
+})
+
+const DIMS = { x: 16, y: 12, z: 16 }
+const hitOn = (kind: Hit['kind'], point: [number, number, number],
+               normal: [number, number, number]): Hit =>
+  ({ kind, point: { x: point[0], y: point[1], z: point[2] },
+     normal: { x: normal[0], y: normal[1], z: normal[2] } })
+
+test('sobre la cara superior de un bloque, colocar va arriba', () => {
+  const r = resolveCell(hitOn('block', [7.5, 2, 7.5], [0, 1, 0]), NO_MODS, 'brush', DIMS)
+  expect(r.target).toEqual({ x: 7, y: 1, z: 7 })
+  expect(r.placement).toEqual({ x: 7, y: 2, z: 7 })
+  expect(r.chosen).toEqual({ x: 7, y: 2, z: 7 })
+  expect(r.action).toBe('place')
+  expect(r.valid).toBe(true)
+})
+
+test('sobre el build plate no hay bloque objetivo', () => {
+  const r = resolveCell(hitOn('plate', [4.5, 0, 8.5], [0, 1, 0]), NO_MODS, 'brush', DIMS)
+  expect(r.target).toBeNull()
+  expect(r.placement).toEqual({ x: 4, y: 0, z: 8 })
+  expect(r.chosen).toEqual({ x: 4, y: 0, z: 8 })
+})
+
+test('la goma sobre el build plate no tiene nada que borrar', () => {
+  const r = resolveCell(hitOn('plate', [4.5, 0, 8.5], [0, 1, 0]), NO_MODS, 'eraser', DIMS)
+  expect(r.target).toBeNull()
+  expect(r.chosen).toBeNull()
+  expect(r.action).toBe('none')
+  expect(r.valid).toBe(false)
+})
+
+test('shift convierte colocar en borrar sobre el bloque apuntado', () => {
+  const mods = { ...NO_MODS, shift: true }
+  const r = resolveCell(hitOn('block', [7.5, 2, 7.5], [0, 1, 0]), mods, 'brush', DIMS)
+  expect(r.action).toBe('erase')
+  expect(r.chosen).toEqual({ x: 7, y: 1, z: 7 })
+})
+
+test('alt es cuentagotas sobre el bloque apuntado', () => {
+  const mods = { ...NO_MODS, alt: true }
+  const r = resolveCell(hitOn('block', [7.5, 2, 7.5], [0, 1, 0]), mods, 'brush', DIMS)
+  expect(r.action).toBe('pick')
+  expect(r.chosen).toEqual({ x: 7, y: 1, z: 7 })
+})
+
+test('colocar fuera de la grilla es inválido', () => {
+  const r = resolveCell(hitOn('block', [7.5, 12, 7.5], [0, 1, 0]), NO_MODS, 'brush', DIMS)
+  expect(r.placement).toEqual({ x: 7, y: 12, z: 7 })
+  expect(r.valid).toBe(false)
+})
+
+test('la cara devuelta es la del bloque de apoyo', () => {
+  const r = resolveCell(hitOn('block', [7.5, 2, 7.5], [0, 1, 0]), NO_MODS, 'brush', DIMS)
+  expect(r.face).not.toBeNull()
+  expect(r.face!.normal).toEqual({ x: 0, y: 1, z: 0 })
+  expect(r.face!.center).toEqual({ x: 7.5, y: 2, z: 7.5 })
 })
