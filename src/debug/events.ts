@@ -1,16 +1,11 @@
 /**
- * Catálogo de eventos de telemetría.
- *
- * Todo lo que la app registra se declara acá una sola vez. La declaración fija
- * el nombre, la categoría, los nombres de las ranuras numéricas y el nivel de
- * captura mínimo. En tiempo de ejecución sólo circula el entero.
- *
- * Convención: un campo con prefijo `$` guarda un id de cadena internada.
+ * Telemetry event catalog, declared once. Convention: a `$`-prefixed field
+ * holds an interned string id, not a number.
  */
 
 import { def, LEVEL, intern } from './ring'
 
-/* ── máscaras de modificadores ───────────────────────────────────────────── */
+/* ── modifier masks ───────────────────────────────────────────────────────── */
 
 export const MOD = { SHIFT: 1, CTRL: 2, ALT: 4, META: 8 } as const
 
@@ -30,160 +25,160 @@ export function modsLabel(m: number): string {
   return out.join('+')
 }
 
-/** Cadenas que se repiten mucho: se internan al cargar, no en el hot path. */
+/** Strings repeated often: interned at load time, not on the hot path. */
 export const S = {
   mouse: intern('mouse'),
   touch: intern('touch'),
   pen: intern('pen'),
   click: intern('click'),
-  arrastre: intern('arrastre'),
-  orbita: intern('orbita'),
-  cancelado: intern('cancelado'),
-  colocar: intern('colocar'),
-  borrar: intern('borrar'),
-  elegir: intern('elegir'),
-  ninguno: intern('ninguno'),
+  drag: intern('drag'),
+  orbit: intern('orbit'),
+  canceled: intern('canceled'),
+  place: intern('place'),
+  erase: intern('erase'),
+  pick: intern('pick'),
+  none: intern('none'),
 }
 
 export const str = intern
 
-/* ── puntero ─────────────────────────────────────────────────────────────── */
+/* ── pointer ─────────────────────────────────────────────────────────────── */
 
 export const EV = {
-  /* puntero: el gesto crudo, antes de interpretarlo */
-  punteroDown: def('puntero', 'puntero.down',
-    ['$tipo', 'px', 'py', 'boton', 'mods', 'objetivos'], LEVEL.ACCIONES),
-  punteroMove: def('puntero', 'puntero.move',
-    ['px', 'py', 'distDown', 'msDesdeDown'], LEVEL.TODO),
-  punteroUp: def('puntero', 'puntero.up',
-    ['px', 'py', 'distDown', 'msDesdeDown'], LEVEL.ACCIONES),
-  punteroCancel: def('puntero', 'puntero.cancel', ['$tipo', 'msDesdeDown'], LEVEL.ACCIONES),
-  punteroSale: def('puntero', 'puntero.sale', [], LEVEL.NORMAL),
-  punteroSinObjetivo: def('puntero', 'puntero.sin-objetivo', ['px', 'py'], LEVEL.ACCIONES),
-  punteroCaptura: def('puntero', 'puntero.captura', ['id', 'ok'], LEVEL.NORMAL),
-  rueda: def('puntero', 'puntero.rueda', ['deltaY', 'mods'], LEVEL.NORMAL),
+  /* pointer: the raw gesture, before it's interpreted */
+  pointerDown: def('pointer', 'pointer.down',
+    ['$type', 'px', 'py', 'button', 'mods', 'targets'], LEVEL.ACTIONS),
+  pointerMove: def('pointer', 'pointer.move',
+    ['px', 'py', 'distDown', 'msSinceDown'], LEVEL.ALL),
+  pointerUp: def('pointer', 'pointer.up',
+    ['px', 'py', 'distDown', 'msSinceDown'], LEVEL.ACTIONS),
+  pointerCancel: def('pointer', 'pointer.cancel', ['$type', 'msSinceDown'], LEVEL.ACTIONS),
+  pointerLeave: def('pointer', 'pointer.leave', [], LEVEL.NORMAL),
+  pointerNoTarget: def('pointer', 'pointer.no-target', ['px', 'py'], LEVEL.ACTIONS),
+  pointerCapture: def('pointer', 'pointer.capture', ['id', 'ok'], LEVEL.NORMAL),
+  wheel: def('pointer', 'pointer.wheel', ['deltaY', 'mods'], LEVEL.NORMAL),
 
-  /* raycast: qué tocó el rayo y a qué distancia. Explica los off-by-one. */
-  rayo: def('puntero', 'rayo',
-    ['$objeto', 'wx', 'wy', 'wz', 'dist', 'intersecciones'], LEVEL.NORMAL),
-  rayoCelda: def('puntero', 'rayo.celda',
-    ['objx', 'objy', 'objz', 'colx', 'coly', 'colz'], LEVEL.NORMAL),
-  hover: def('puntero', 'hover', ['x', 'y', 'z', '$fuente'], LEVEL.NORMAL),
-  hoverNulo: def('puntero', 'hover.nulo', [], LEVEL.NORMAL),
+  /* raycast: what the ray hit and at what distance; explains off-by-one bugs */
+  ray: def('pointer', 'ray',
+    ['$object', 'wx', 'wy', 'wz', 'dist', 'hits'], LEVEL.NORMAL),
+  rayCell: def('pointer', 'ray.cell',
+    ['targetX', 'targetY', 'targetZ', 'placeX', 'placeY', 'placeZ'], LEVEL.NORMAL),
+  hover: def('pointer', 'hover', ['x', 'y', 'z', '$source'], LEVEL.NORMAL),
+  hoverNone: def('pointer', 'hover.none', [], LEVEL.NORMAL),
 
-  /* gesto: la interpretación, que es donde viven los bugs */
-  gestoInicio: def('gesto', 'gesto.inicio', ['$tipo', '$intencion', 'mods'], LEVEL.ACCIONES),
-  gestoClasificado: def('gesto', 'gesto.clasificado', ['$como', 'distPx', 'ms'], LEVEL.ACCIONES),
-  gestoFin: def('gesto', 'gesto.fin', ['$como', 'ms', 'celdas', 'distPx'], LEVEL.ACCIONES),
-  gestoAbortado: def('gesto', 'gesto.abortado', ['$motivo', 'ms'], LEVEL.ACCIONES),
+  /* gesture: the interpretation layer, which is where the bugs live */
+  gestureStart: def('gesture', 'gesture.start', ['$type', '$intent', 'mods'], LEVEL.ACTIONS),
+  gestureClassified: def('gesture', 'gesture.classified', ['$as', 'distPx', 'ms'], LEVEL.ACTIONS),
+  gestureEnd: def('gesture', 'gesture.end', ['$as', 'ms', 'cells', 'distPx'], LEVEL.ACTIONS),
+  gestureAborted: def('gesture', 'gesture.aborted', ['$reason', 'ms'], LEVEL.ACTIONS),
 
-  /* cámara */
-  orbitInicio: def('camara', 'camara.orbit-inicio', [], LEVEL.ACCIONES),
-  orbitFin: def('camara', 'camara.orbit-fin', [], LEVEL.ACCIONES),
-  camaraPose: def('camara', 'camara.pose',
+  /* camera */
+  orbitStart: def('camera', 'camera.orbit-start', [], LEVEL.ACTIONS),
+  orbitEnd: def('camera', 'camera.orbit-end', [], LEVEL.ACTIONS),
+  cameraPose: def('camera', 'camera.pose',
     ['x', 'y', 'z', 'tx', 'ty', 'tz'], LEVEL.NORMAL),
-  camaraEncuadre: def('camara', 'camara.encuadre', ['radio', 'dist', 'bloques'], LEVEL.ACCIONES),
-  orbitHabilitado: def('camara', 'camara.orbit-habilitado', ['activo', '$motivo'], LEVEL.ACCIONES),
+  cameraFit: def('camera', 'camera.fit', ['radius', 'dist', 'blocks'], LEVEL.ACTIONS),
+  orbitEnabled: def('camera', 'camera.orbit-enabled', ['active', '$reason'], LEVEL.ACTIONS),
 
-  /* edición */
-  escritura: def('edicion', 'escritura',
-    ['pedidas', 'aplicadas', 'total', 'enTrazo', 'ms'], LEVEL.ACCIONES),
-  sinCambio: def('edicion', 'escritura.sin-cambio', ['pedidas', '$motivo'], LEVEL.NORMAL),
-  trazoInicio: def('edicion', 'trazo.inicio', ['$tool'], LEVEL.ACCIONES),
-  trazoFin: def('edicion', 'trazo.fin', ['celdas', 'ms'], LEVEL.ACCIONES),
-  trazoHuerfano: def('error', 'trazo.huerfano', ['deltasPerdidos'], LEVEL.ACCIONES),
-  accionPlano: def('edicion', 'accion-plano',
-    ['$tool', 'u', 'v', 'borrar', 'capa', '$eje'], LEVEL.ACCIONES),
-  pintar: def('edicion', 'pintar', ['x', 'y', 'z', '$bloque', 'borrar'], LEVEL.NORMAL),
-  deshacer: def('edicion', 'deshacer', ['aplicado', 'total', 'pila'], LEVEL.ACCIONES),
-  rehacer: def('edicion', 'rehacer', ['aplicado', 'total', 'pila'], LEVEL.ACCIONES),
-  copiar: def('edicion', 'copiar', ['celdas', 'cortar'], LEVEL.ACCIONES),
-  pegar: def('edicion', 'pegar', ['u', 'v', 'celdas'], LEVEL.ACCIONES),
-  seleccion: def('edicion', 'seleccion', ['ancho', 'alto', 'celdas'], LEVEL.ACCIONES),
-  espejo: def('edicion', 'espejo', ['origen', 'generadas'], LEVEL.NORMAL),
+  /* editing */
+  write: def('edit', 'write',
+    ['requested', 'applied', 'total', 'inStroke', 'ms'], LEVEL.ACTIONS),
+  noChange: def('edit', 'write.no-change', ['requested', '$reason'], LEVEL.NORMAL),
+  strokeStart: def('edit', 'stroke.start', ['$tool'], LEVEL.ACTIONS),
+  strokeEnd: def('edit', 'stroke.end', ['cells', 'ms'], LEVEL.ACTIONS),
+  strokeOrphaned: def('error', 'stroke.orphaned', ['deltasLost'], LEVEL.ACTIONS),
+  planeClick: def('edit', 'plane-click',
+    ['$tool', 'u', 'v', 'erase', 'layer', '$axis'], LEVEL.ACTIONS),
+  paint: def('edit', 'paint', ['x', 'y', 'z', '$block', 'erase'], LEVEL.NORMAL),
+  undo: def('edit', 'undo', ['applied', 'total', 'stack'], LEVEL.ACTIONS),
+  redo: def('edit', 'redo', ['applied', 'total', 'stack'], LEVEL.ACTIONS),
+  copy: def('edit', 'copy', ['cells', 'cut'], LEVEL.ACTIONS),
+  paste: def('edit', 'paste', ['u', 'v', 'cells'], LEVEL.ACTIONS),
+  selection: def('edit', 'selection', ['width', 'height', 'cells'], LEVEL.ACTIONS),
+  mirror: def('edit', 'mirror', ['source', 'generated'], LEVEL.NORMAL),
 
-  /* herramienta y modo */
-  herramienta: def('herramienta', 'herramienta', ['$de', '$a', 'forzoCapa'], LEVEL.ACCIONES),
-  bloque: def('herramienta', 'bloque', ['$de', '$a'], LEVEL.ACCIONES),
-  capa: def('herramienta', 'capa', ['de', 'a', '$eje', 'topeado'], LEVEL.ACCIONES),
-  ejeCapa: def('herramienta', 'eje-capa', ['$de', '$a'], LEVEL.ACCIONES),
-  modoCapa: def('herramienta', 'modo-capa', ['$de', '$a'], LEVEL.ACCIONES),
-  toggle: def('herramienta', 'toggle', ['$que', 'valor'], LEVEL.ACCIONES),
+  /* tool and mode */
+  tool: def('tool', 'tool', ['$from', '$to', 'forcedLayer'], LEVEL.ACTIONS),
+  block: def('tool', 'block', ['$from', '$to'], LEVEL.ACTIONS),
+  layer: def('tool', 'layer', ['from', 'to', '$axis', 'clamped'], LEVEL.ACTIONS),
+  layerAxis: def('tool', 'layer-axis', ['$from', '$to'], LEVEL.ACTIONS),
+  layerMode: def('tool', 'layer-mode', ['$from', '$to'], LEVEL.ACTIONS),
+  toggle: def('tool', 'toggle', ['$which', 'value'], LEVEL.ACTIONS),
 
-  /* teclado */
-  tecla: def('teclado', 'tecla', ['$key', 'mods', 'repetida'], LEVEL.ACCIONES),
-  teclaIgnorada: def('teclado', 'tecla.ignorada', ['$key', '$motivo'], LEVEL.NORMAL),
+  /* keyboard */
+  key: def('keyboard', 'key', ['$key', 'mods', 'repeat'], LEVEL.ACTIONS),
+  keyIgnored: def('keyboard', 'key.ignored', ['$key', '$reason'], LEVEL.NORMAL),
 
-  /* vista y UI */
-  vista: def('vista', 'vista', ['$de', '$a'], LEVEL.ACCIONES),
-  panel: def('vista', 'panel', ['$cual', 'abierto'], LEVEL.ACCIONES),
-  boton: def('vista', 'boton', ['$id', '$contexto'], LEVEL.ACCIONES),
-  campo: def('vista', 'campo', ['$id', 'largo'], LEVEL.ACCIONES),
-  resize: def('vista', 'resize', ['w', 'h', 'dpr'], LEVEL.ACCIONES),
-  guiaPaso: def('vista', 'guia.paso', ['de', 'a', 'total'], LEVEL.ACCIONES),
+  /* view and UI */
+  view: def('view', 'view', ['$from', '$to'], LEVEL.ACTIONS),
+  panel: def('view', 'panel', ['$which', 'open'], LEVEL.ACTIONS),
+  button: def('view', 'button', ['$id', '$context'], LEVEL.ACTIONS),
+  field: def('view', 'field', ['$id', 'length'], LEVEL.ACTIONS),
+  resize: def('view', 'resize', ['w', 'h', 'dpr'], LEVEL.ACTIONS),
+  guideStep: def('view', 'guide.step', ['from', 'to', 'total'], LEVEL.ACTIONS),
 
-  /* documento */
-  disenoNuevo: def('diseno', 'diseno.nuevo', ['dx', 'dy', 'dz'], LEVEL.ACCIONES),
-  disenoCargado: def('diseno', 'diseno.cargado', ['bloques', 'dx', 'dy', 'dz', 'ms'], LEVEL.ACCIONES),
-  disenoGuardado: def('diseno', 'diseno.guardado', ['bloques', 'bytes', 'ms'], LEVEL.ACCIONES),
-  disenoBorrado: def('diseno', 'diseno.borrado', [], LEVEL.ACCIONES),
-  disenoRedimensionado: def('diseno', 'diseno.redimensionado', ['dx', 'dy', 'dz', 'perdidos'], LEVEL.ACCIONES),
-  exportar: def('diseno', 'exportar', ['$formato', 'bytes', 'ms'], LEVEL.ACCIONES),
-  importar: def('diseno', 'importar', ['$formato', 'bytes', 'bloques', 'ms'], LEVEL.ACCIONES),
+  /* document */
+  designNew: def('design', 'design.new', ['dx', 'dy', 'dz'], LEVEL.ACTIONS),
+  designLoaded: def('design', 'design.loaded', ['blocks', 'dx', 'dy', 'dz', 'ms'], LEVEL.ACTIONS),
+  designSaved: def('design', 'design.saved', ['blocks', 'bytes', 'ms'], LEVEL.ACTIONS),
+  designDeleted: def('design', 'design.deleted', [], LEVEL.ACTIONS),
+  designResized: def('design', 'design.resized', ['dx', 'dy', 'dz', 'lost'], LEVEL.ACTIONS),
+  exportDesign: def('design', 'export', ['$format', 'bytes', 'ms'], LEVEL.ACTIONS),
+  importDesign: def('design', 'import', ['$format', 'bytes', 'blocks', 'ms'], LEVEL.ACTIONS),
 
-  /* frame y render */
+  /* frame and render */
   frame: def('frame', 'frame',
     ['ms', 'msCPU', 'calls', 'tris', 'geoms', 'progs'], LEVEL.NORMAL),
-  frameLento: def('frame', 'frame.lento', ['ms', 'calls', 'tris'], LEVEL.ACCIONES),
+  frameSlow: def('frame', 'frame.slow', ['ms', 'calls', 'tris'], LEVEL.ACTIONS),
   remesh: def('render', 'remesh',
-    ['chunk', 'celdas', 'ms', 'vertsOpaco', 'vertsTrans'], LEVEL.NORMAL),
-  remeshLote: def('render', 'remesh.lote', ['chunks', 'ms', 'celdas'], LEVEL.ACCIONES),
-  chunksSucios: def('render', 'chunks.sucios', ['cantidad', 'enLote'], LEVEL.TODO),
-  atlas: def('render', 'atlas.generado', ['ms', 'slots'], LEVEL.ACCIONES),
-  contextoWebGL: def('render', 'webgl.contexto', ['perdido'], LEVEL.ACCIONES),
+    ['chunk', 'cells', 'ms', 'vertsOpaque', 'vertsTrans'], LEVEL.NORMAL),
+  remeshBatch: def('render', 'remesh.batch', ['chunks', 'ms', 'cells'], LEVEL.ACTIONS),
+  chunksDirty: def('render', 'chunks.dirty', ['count', 'batched'], LEVEL.ALL),
+  atlas: def('render', 'atlas.generated', ['ms', 'slots'], LEVEL.ACTIONS),
+  webglContext: def('render', 'webgl.context', ['lost'], LEVEL.ACTIONS),
 
-  /* rendimiento del entorno */
-  tareaLarga: def('perf', 'tarea-larga', ['ms'], LEVEL.ACCIONES),
-  frameLargo: def('perf', 'frame-largo', ['ms', 'msScript', 'msEstiloLayout', 'msBloqueo'], LEVEL.ACCIONES),
-  memoria: def('perf', 'memoria', ['usadaMB', 'totalMB', 'limiteMB'], LEVEL.NORMAL),
-  latenciaEvento: def('perf', 'latencia-evento', ['ms', '$tipo'], LEVEL.NORMAL),
-  medicion: def('perf', 'medicion', ['$que', 'ms'], LEVEL.NORMAL),
+  /* environment performance */
+  longTask: def('perf', 'long-task', ['ms'], LEVEL.ACTIONS),
+  longFrame: def('perf', 'long-frame', ['ms', 'msScript', 'msStyleLayout', 'msBlocking'], LEVEL.ACTIONS),
+  memory: def('perf', 'memory', ['usedMB', 'totalMB', 'limitMB'], LEVEL.NORMAL),
+  eventLatency: def('perf', 'event-latency', ['ms', '$type'], LEVEL.NORMAL),
+  measurement: def('perf', 'measurement', ['$label', 'ms'], LEVEL.NORMAL),
 
-  /* almacenamiento */
-  storage: def('red', 'storage', ['$op', 'ms', 'bytes', 'ok'], LEVEL.ACCIONES),
-  codec: def('red', 'codec', ['$op', 'ms', 'bytesCrudo', 'bytesComprimido', 'bloques'], LEVEL.ACCIONES),
+  /* storage */
+  storage: def('net', 'storage', ['$op', 'ms', 'bytes', 'ok'], LEVEL.ACTIONS),
+  codec: def('net', 'codec', ['$op', 'ms', 'bytesRaw', 'bytesCompressed', 'blocks'], LEVEL.ACTIONS),
 
-  /* sistema */
-  arranque: def('sistema', 'arranque', [], LEVEL.ACCIONES),
-  visibilidad: def('sistema', 'visibilidad', ['visible'], LEVEL.ACCIONES),
-  foco: def('sistema', 'foco', ['tiene'], LEVEL.ACCIONES),
-  nivelCaptura: def('sistema', 'nivel-captura', ['de', 'a'], LEVEL.ACCIONES),
-  snapshot: def('sistema', 'snapshot', [], LEVEL.ACCIONES),
+  /* system */
+  boot: def('system', 'boot', [], LEVEL.ACTIONS),
+  visibility: def('system', 'visibility', ['visible'], LEVEL.ACTIONS),
+  focus: def('system', 'focus', ['has'], LEVEL.ACTIONS),
+  captureLevel: def('system', 'capture-level', ['from', 'to'], LEVEL.ACTIONS),
+  snapshot: def('system', 'snapshot', [], LEVEL.ACTIONS),
 
-  /* degradación silenciosa: todo lo que hoy se pierde sin avisar */
-  estado: def('vista', 'estado', ['$texto'], LEVEL.ACCIONES),
-  limiteAlcanzado: def('error', 'limite-alcanzado', ['$donde', 'limite'], LEVEL.ACCIONES),
-  descartado: def('error', 'descartado', ['$donde', 'cantidad', 'deTotal'], LEVEL.ACCIONES),
-  historialPodado: def('edicion', 'historial.podado', ['profundidad', 'futuroPerdido'], LEVEL.ACCIONES),
-  historialLimpiado: def('edicion', 'historial.limpiado', ['pasado', 'futuro', '$motivo'], LEVEL.ACCIONES),
-  bloqueDesconocido: def('error', 'bloque-desconocido', ['$id'], LEVEL.ACCIONES),
-  popupBloqueado: def('error', 'popup-bloqueado', ['$que'], LEVEL.ACCIONES),
-  fueraDeLimites: def('error', 'fuera-de-limites', ['x', 'y', 'z', '$origen'], LEVEL.NORMAL),
+  /* silent degradation: everything that today gets lost without any warning */
+  status: def('view', 'status', ['$text'], LEVEL.ACTIONS),
+  limitReached: def('error', 'limit-reached', ['$where', 'limit'], LEVEL.ACTIONS),
+  discarded: def('error', 'discarded', ['$where', 'count', 'ofTotal'], LEVEL.ACTIONS),
+  historyPruned: def('edit', 'history.pruned', ['depth', 'futureLost'], LEVEL.ACTIONS),
+  historyCleared: def('edit', 'history.cleared', ['past', 'future', '$reason'], LEVEL.ACTIONS),
+  unknownBlock: def('error', 'unknown-block', ['$id'], LEVEL.ACTIONS),
+  popupBlocked: def('error', 'popup-blocked', ['$what'], LEVEL.ACTIONS),
+  outOfBounds: def('error', 'out-of-bounds', ['x', 'y', 'z', '$source'], LEVEL.NORMAL),
 
-  /* pre-declarados para los workstreams de specs/: se definen acá para que
-     ninguno tenga que tocar este archivo compartido y puedan correr en paralelo */
-  gestoTactil: def('gesto', 'gesto.tactil', ['$tipo', 'punteros', 'ms'], LEVEL.ACCIONES),
-  tutorialPaso: def('vista', 'tutorial.paso', ['paso', 'total', '$resultado'], LEVEL.ACCIONES),
-  generador: def('edicion', 'generador', ['$tipo', 'celdas', 'fueraDeGrilla', 'ms'], LEVEL.ACCIONES),
-  plantilla: def('diseno', 'plantilla', ['$id', '$accion', 'celdas'], LEVEL.ACCIONES),
-  iaPedido: def('red', 'ia.pedido', ['$modo', 'imagenes', 'largoPrompt'], LEVEL.ACCIONES),
-  iaRespuesta: def('red', 'ia.respuesta', ['ms', 'pasos', 'tokensSalida'], LEVEL.ACCIONES),
-  iaFallo: def('error', 'ia.fallo', ['$categoria', 'estado'], LEVEL.ACCIONES),
-  iaMapeoBloque: def('error', 'ia.bloque-mapeado', ['$de', '$a'], LEVEL.ACCIONES),
+  /* pre-declared for specs/ workstreams: defined here so none touch this
+     shared file, letting them run in parallel */
+  touchGesture: def('gesture', 'gesture.touch', ['$type', 'pointers', 'ms'], LEVEL.ACTIONS),
+  tutorialStep: def('view', 'tutorial.step', ['step', 'total', '$result'], LEVEL.ACTIONS),
+  generator: def('edit', 'generator', ['$type', 'cells', 'outOfGrid', 'ms'], LEVEL.ACTIONS),
+  template: def('design', 'template', ['$id', '$action', 'cells'], LEVEL.ACTIONS),
+  aiRequest: def('net', 'ai.request', ['$mode', 'images', 'promptLength'], LEVEL.ACTIONS),
+  aiResponse: def('net', 'ai.response', ['ms', 'steps', 'tokensOut'], LEVEL.ACTIONS),
+  aiFailure: def('error', 'ai.failure', ['$category', 'status'], LEVEL.ACTIONS),
+  aiBlockMapped: def('error', 'ai.block-mapped', ['$from', '$to'], LEVEL.ACTIONS),
 
-  /* errores */
-  excepcion: def('error', 'excepcion', [], LEVEL.ACCIONES),
-  promesaRechazada: def('error', 'promesa-rechazada', [], LEVEL.ACCIONES),
-  invariante: def('error', 'invariante', [], LEVEL.ACCIONES),
-  fallo: def('error', 'fallo', ['$donde'], LEVEL.ACCIONES),
+  /* errors */
+  exception: def('error', 'exception', [], LEVEL.ACTIONS),
+  unhandledRejection: def('error', 'unhandled-rejection', [], LEVEL.ACTIONS),
+  invariant: def('error', 'invariant', [], LEVEL.ACTIONS),
+  failure: def('error', 'failure', ['$where'], LEVEL.ACTIONS),
 } as const

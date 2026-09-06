@@ -19,8 +19,8 @@ function ChunkMesh({
 
   const geo = useMemo(
     () => buildChunkGeometry(world, ck),
-    // `version` es la dependencia real: la geometría se reconstruye sólo
-    // cuando ese chunk se ensucia.
+    // `version` is the real dependency: geometry rebuilds only when this
+    // chunk gets marked dirty.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [world, ck, version],
   )

@@ -17,8 +17,8 @@ const TOOL_KEYS: Record<string, Tool> = {
 
 const WEBGL = hasWebGL()
 
-// La guía no toca three.js: se carga recién cuando se entra a verla, así el
-// editor no paga su peso en el arranque.
+// Guide never touches three.js: lazy-loaded on demand, so the editor doesn't
+// pay its weight at boot.
 const GuideView = lazy(() =>
   import('./ui/GuideView').then((m) => ({ default: m.GuideView })),
 )
@@ -42,7 +42,7 @@ export default function App() {
       touchClock()
       const el = e.target as HTMLElement | null
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
-        rec(EV.teclaIgnorada, str(e.key), str('foco-en-campo'))
+        rec(EV.keyIgnored, str(e.key), str('field-focused'))
         return
       }
       const s = useEditor.getState()
@@ -51,13 +51,13 @@ export default function App() {
       if (mod && e.shiftKey && e.key.toLowerCase() === 'd') {
         e.preventDefault()
         setDebugOpen((v) => {
-          rec(EV.panel, str('telemetria'), v ? 0 : 1)
+          rec(EV.panel, str('telemetry'), v ? 0 : 1)
           return !v
         })
         return
       }
 
-      rec(EV.tecla, str(e.key), packMods(e), e.repeat ? 1 : 0)
+      rec(EV.key, str(e.key), packMods(e), e.repeat ? 1 : 0)
 
       if (mod && e.key.toLowerCase() === 'z') {
         e.preventDefault()

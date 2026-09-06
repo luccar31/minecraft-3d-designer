@@ -5,7 +5,6 @@ import { blockDef } from '../blocks/palette'
 import type { World } from '../voxel/world'
 import { planeToWorld, worldToPlane } from '../voxel/ops'
 
-/** Caja de alambre sobre la celda apuntada. */
 export function Cursor({ cell, color = '#ffffff' }: { cell: Vec3 | null; color?: string }) {
   if (!cell) return null
   return (
@@ -16,7 +15,6 @@ export function Cursor({ cell, color = '#ffffff' }: { cell: Vec3 | null; color?:
   )
 }
 
-/** Contorno del volumen completo de la grilla. */
 export function GridBounds({ dims }: { dims: Dims }) {
   const geo = useMemo(
     () => new THREE.EdgesGeometry(new THREE.BoxGeometry(dims.x, dims.y, dims.z)),
@@ -49,9 +47,8 @@ export function SelectionBox({ sel }: { sel: BoxSel | null }) {
 }
 
 /**
- * Plano de trabajo del slice. En modo capa es el ÚNICO objeto que recibe
- * clicks: toda la interacción pasa a ser 2D sobre este plano, lo que permite
- * pintar sobre celdas vacías sin necesitar un bloque de apoyo.
+ * The only clickable object in slice mode: makes interaction 2D, letting
+ * you paint empty cells without support.
  */
 export function SlicePlane({
   axis, index, dims, onDown, onMove, onLeave,
@@ -108,8 +105,8 @@ export function SlicePlane({
 }
 
 /**
- * Capa anterior dibujada como fantasma. Es la referencia de alineación:
- * sin esto, editar una capa aislada es dibujar a ciegas.
+ * Alignment reference: without it, editing an isolated layer means drawing
+ * blind.
  */
 export function GhostSlice({
   world, axis, index, dims,
@@ -132,8 +129,8 @@ export function GhostSlice({
       }
     }
     return out
-    // El fantasma se recalcula al cambiar de capa; durante la edición de la
-    // capa actual no cambia, así que no depende de `rev`.
+    // Ghost only changes when the layer changes, not during edits, so it
+    // excludes `rev`.
   }, [world, axis, index, dims.x, dims.y, dims.z])
 
   if (cells.length === 0) return null
@@ -150,7 +147,6 @@ export function GhostSlice({
   )
 }
 
-/** Punto de anclaje de línea / rectángulo / selección. */
 export function AnchorMarker({
   anchor, axis, index,
 }: {

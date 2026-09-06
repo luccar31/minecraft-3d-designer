@@ -7,14 +7,14 @@ async function ready(page: Page) {
   await page.goto('/')
   await page.waitForSelector('canvas')
   await page.waitForFunction(() => Boolean(window.__mcb))
-  // Deja que el atlas y el primer frame se resuelvan.
+  // Lets the atlas and first frame settle.
   await page.waitForTimeout(400)
 }
 
 const blockCount = (page: Page) =>
   page.evaluate(() => window.__mcb.store.getState().world.size)
 
-/** Lector NBT mínimo, sólo para verificar la estructura del .schem. */
+/** Minimal NBT reader, just to verify the .schem's structure. */
 function readNbt(buf: Buffer) {
   let off = 0
   const u8 = () => buf.readUInt8(off++)
@@ -40,7 +40,7 @@ function readNbt(buf: Buffer) {
         }
         return o
       }
-      default: throw new Error(`tag no soportado: ${tag}`)
+      default: throw new Error(`unsupported tag: ${tag}`)
     }
   }
 
@@ -51,39 +51,39 @@ function readNbt(buf: Buffer) {
 
 /* ── tests ───────────────────────────────────────────────────────────── */
 
-test('la app arranca y muestra el editor 3D', async ({ page }) => {
+test('the app boots and shows the 3D editor', async ({ page }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   await ready(page)
 
   await expect(page.locator('canvas')).toBeVisible()
   await expect(page.getByTestId('block-count')).toContainText('0 bloques')
-  expect(errors, `errores de página: ${errors.join(' | ')}`).toEqual([])
+  expect(errors, `page errors: ${errors.join(' | ')}`).toEqual([])
 })
 
-test('colocar bloques con click en el viewport', async ({ page }) => {
+test('places blocks by clicking in the viewport', async ({ page }) => {
   await ready(page)
   const canvas = page.locator('canvas')
   const box = (await canvas.boundingBox())!
 
-  // Un click en el centro cae sobre el build plate.
+  // A click in the center lands on the build plate.
   await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
   await page.waitForTimeout(150)
   expect(await blockCount(page)).toBe(1)
 
-  // Un segundo click en otro punto agrega otro bloque.
+  // A second click elsewhere adds another block.
   await page.mouse.click(box.x + box.width / 2 + 60, box.y + box.height / 2 + 30)
   await page.waitForTimeout(150)
   expect(await blockCount(page)).toBeGreaterThanOrEqual(2)
 
-  // Deshacer revierte exactamente un bloque.
+  // Undo reverts exactly one block.
   const before = await blockCount(page)
   await page.keyboard.press('Control+z')
   await page.waitForTimeout(120)
   expect(await blockCount(page)).toBe(before - 1)
 })
 
-test('modo capa: rectángulo relleno y simetría', async ({ page }) => {
+test('layer mode: filled rectangle and symmetry', async ({ page }) => {
   await ready(page)
 
   await page.evaluate(() => {
@@ -97,10 +97,10 @@ test('modo capa: rectángulo relleno y simetría', async ({ page }) => {
     s.planeAction({ u: 2, v: 2 }, false)
     s.planeAction({ u: 6, v: 5 }, false)
   })
-  // 5 × 4 celdas
+  // 5 x 4 cells
   expect(await blockCount(page)).toBe(20)
 
-  // Con espejo en X, cada escritura se duplica.
+  // With X mirroring, every write duplicates.
   await page.evaluate(() => {
     const s = window.__mcb.store.getState()
     s.newDesign({ x: 16, y: 12, z: 16 }, 'Test espejo')
@@ -119,7 +119,7 @@ test('modo capa: rectángulo relleno y simetría', async ({ page }) => {
   expect(mirrored[1]).toBe(mirrored[0])
 })
 
-test('herramientas de área fuerzan el modo capa', async ({ page }) => {
+test('area tools force layer mode', async ({ page }) => {
   await ready(page)
   const view = await page.evaluate(() => {
     const s = window.__mcb.store.getState()
@@ -130,7 +130,7 @@ test('herramientas de área fuerzan el modo capa', async ({ page }) => {
   expect(view).not.toBe('off')
 })
 
-test('guardar, recargar y reabrir conserva el diseño', async ({ page }) => {
+test('save, reload, and reopen preserves the design', async ({ page }) => {
   await ready(page)
 
   const id = await page.evaluate(async () => {
@@ -162,7 +162,7 @@ test('guardar, recargar y reabrir conserva el diseño', async ({ page }) => {
   expect(name).toBe('Torre de prueba')
 })
 
-test('la guía comprime capas repetidas y cuenta materiales', async ({ page }) => {
+test('the guide compresses repeated layers and counts materials', async ({ page }) => {
   await ready(page)
 
   const guide = await page.evaluate(() => {
@@ -170,12 +170,12 @@ test('la guía comprime capas repetidas y cuenta materiales', async ({ page }) =
     s.newDesign({ x: 10, y: 10, z: 10 }, 'Columna')
     s.setSliceView('isolate')
     s.setBlock('minecraft:stone')
-    // Misma celda en 6 alturas: debe colapsar a un solo paso.
+    // Same cell at 6 heights: should collapse into a single step.
     for (let y = 0; y < 6; y++) {
       window.__mcb.store.getState().setSliceIndex(y)
       window.__mcb.store.getState().planeAction({ u: 5, v: 5 }, false)
     }
-    // Una capa distinta arriba.
+    // A different layer on top.
     window.__mcb.store.getState().setSliceIndex(6)
     window.__mcb.store.getState().setBlock('minecraft:glass')
     window.__mcb.store.getState().planeAction({ u: 5, v: 5 }, false)
@@ -195,13 +195,13 @@ test('la guía comprime capas repetidas y cuenta materiales', async ({ page }) =
   expect(guide.totals).toContainEqual(['minecraft:stone', 6])
   expect(guide.totals).toContainEqual(['minecraft:glass', 1])
 
-  // La vista de guía lo muestra.
+  // The guide view shows it.
   await page.getByTestId('view-guide').click()
   await expect(page.getByTestId('guide-step')).toContainText('Paso 1 de 2')
   await expect(page.locator('.rep')).toContainText('6')
 })
 
-test('el .schem exportado es NBT válido y lee como Sponge v2', async ({ page }) => {
+test('the exported .schem is valid NBT and reads as Sponge v2', async ({ page }) => {
   await ready(page)
 
   const b64 = await page.evaluate(() => {
@@ -223,7 +223,7 @@ test('el .schem exportado es NBT válido y lee como Sponge v2', async ({ page })
   })
 
   const gz = Buffer.from(b64, 'base64')
-  // Cabecera gzip.
+  // Gzip header.
   expect(gz[0]).toBe(0x1f)
   expect(gz[1]).toBe(0x8b)
 
@@ -234,7 +234,7 @@ test('el .schem exportado es NBT válido y lee como Sponge v2', async ({ page })
   const v = nbt.value
   expect(v.Version).toBe(2)
   expect(typeof v.DataVersion).toBe('number')
-  // Bounding box de los 3 bloques: x 1..2, z 1..2, y 0.
+  // Bounding box of the 3 blocks: x 1..2, z 1..2, y 0.
   expect(v.Width).toBe(2)
   expect(v.Height).toBe(1)
   expect(v.Length).toBe(2)
@@ -246,14 +246,14 @@ test('el .schem exportado es NBT válido y lee como Sponge v2', async ({ page })
   expect(v.PaletteMax).toBe(Object.keys(palette).length)
 
   const data = v.BlockData as Buffer
-  expect(data.length).toBe(4) // 2×1×2 celdas, todas con varint de 1 byte
-  // Orden (y*Length + z)*Width + x  →  [ (1,1) stone, (2,1) stone, (1,2) glass, aire ]
+  expect(data.length).toBe(4) // 2x1x2 cells, all with a 1-byte varint
+  // Order (y*Length + z)*Width + x  →  [ (1,1) stone, (2,1) stone, (1,2) glass, air ]
   const stone = palette['minecraft:stone']
   const glass = palette['minecraft:glass']
   expect([...data]).toEqual([stone, stone, glass, 0])
 })
 
-test('captura de pantalla del editor con una construcción', async ({ page }) => {
+test('screenshot of the editor with a build', async ({ page }) => {
   await ready(page)
 
   await page.evaluate(() => {
@@ -262,7 +262,7 @@ test('captura de pantalla del editor con una construcción', async ({ page }) =>
     const st = () => window.__mcb.store.getState()
     st().setSliceView('isolate')
 
-    // Piso
+    // Floor
     st().setSliceIndex(0)
     st().setBlock('minecraft:stone_bricks')
     st().setTool('rect')
@@ -270,9 +270,9 @@ test('captura de pantalla del editor con una construcción', async ({ page }) =>
     st().planeAction({ u: 6, v: 6 }, false)
     st().planeAction({ u: 16, v: 15 }, false)
 
-    // Paredes
+    // Walls
     st().setTool('rect')
-    st().toggle('rectFilled') // vuelve a contorno
+    st().toggle('rectFilled') // back to outline
     for (let y = 1; y <= 4; y++) {
       st().setSliceIndex(y)
       st().setBlock(y === 2 ? 'minecraft:glass' : 'minecraft:oak_planks')
@@ -280,7 +280,7 @@ test('captura de pantalla del editor con una construcción', async ({ page }) =>
       st().planeAction({ u: 16, v: 15 }, false)
     }
 
-    // Techo
+    // Roof
     st().setSliceIndex(5)
     st().setBlock('minecraft:dark_oak_planks')
     st().setTool('rect')

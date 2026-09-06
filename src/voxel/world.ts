@@ -14,16 +14,13 @@ const chunkOf = (x: number, y: number, z: number) =>
   packChunk((x / CHUNK) | 0, (y / CHUNK) | 0, (z / CHUNK) | 0)
 
 /**
- * Grilla de voxels sparse con chunks de 16³.
- *
- * Vive FUERA de React a propósito: cada bloque colocado toca un Map mutable y
- * notifica sólo a los chunks afectados. Un store inmutable clonaría la grilla
- * entera en cada click.
+ * Lives outside React on purpose: mutates a Map, notifies only affected
+ * chunks — no full-grid clone per click.
  */
 export class World {
   dims: Dims
   readonly voxels = new Map<VoxelKey, BlockId>()
-  /** Contador acumulado de escrituras que cayeron fuera de la grilla. */
+  /** Running count of writes that fell outside the grid. */
   outOfBounds = 0
   private readonly chunkCells = new Map<ChunkKey, Set<VoxelKey>>()
   private readonly versions = new Map<ChunkKey, number>()
@@ -58,13 +55,13 @@ export class World {
     return this.voxels.get(k)
   }
 
-  /** Escribe una celda. Devuelve el delta, o null si no cambió nada. */
+  /** Writes a cell. Returns the delta, or null if nothing changed. */
   set(x: number, y: number, z: number, id: BlockId | undefined): CellDelta | null {
     if (!this.inBounds(x, y, z)) {
-      // Pegar o espejar produce rutinariamente celdas fuera de rango: se
-      // descartaban en silencio y el usuario veía "pegué 200 y entraron 40".
+      // Paste/mirror routinely produce out-of-range cells; they were
+      // silently dropped, confusing users ("pasted 200, got 40").
       this.outOfBounds++
-      rec(EV.fueraDeLimites, x, y, z, str('world.set'))
+      rec(EV.outOfBounds, x, y, z, str('world.set'))
       return null
     }
     const key = packKey(x, y, z)
@@ -96,8 +93,8 @@ export class World {
     if (wasEmpty !== isEmpty) this.markStructure()
 
     this.markDirty(ck)
-    // Los chunks vecinos también cambian si el voxel está en el borde:
-    // sus caras de frontera dejan de estar (o pasan a estar) ocluidas.
+    // Neighbor chunks change too when a voxel is on the border: their
+    // boundary faces gain or lose occlusion.
     if (x % CHUNK === 0) this.markDirty(chunkOf(x - 1, y, z))
     if (x % CHUNK === CHUNK - 1) this.markDirty(chunkOf(x + 1, y, z))
     if (y % CHUNK === 0) this.markDirty(chunkOf(x, y - 1, z))
@@ -108,13 +105,13 @@ export class World {
 
   applyDeltas(deltas: CellDelta[], direction: 'redo' | 'undo') {
     this.beginBatch()
-    let fuera = 0
+    let skipped = 0
     for (const d of deltas) {
-      // Un delta anterior a un resize puede caer fuera del volumen actual.
-      if (!this.inBounds(keyX(d.key), keyY(d.key), keyZ(d.key))) { fuera++; continue }
+      // A delta predating a resize can fall outside the current volume.
+      if (!this.inBounds(keyX(d.key), keyY(d.key), keyZ(d.key))) { skipped++; continue }
       this.writeKey(d.key, direction === 'redo' ? d.next : d.prev)
     }
-    if (fuera) rec(EV.descartado, str('applyDeltas'), fuera, deltas.length)
+    if (skipped) rec(EV.discarded, str('applyDeltas'), skipped, deltas.length)
     this.endBatch()
   }
 
@@ -134,12 +131,12 @@ export class World {
   }
 
   resize(dims: Dims) {
-    const antes = this.voxels.size
+    const before = this.voxels.size
     const kept: [VoxelKey, BlockId][] = []
     for (const [k, id] of this.voxels) {
       if (keyX(k) < dims.x && keyY(k) < dims.y && keyZ(k) < dims.z) kept.push([k, id])
     }
-    if (antes - kept.length > 0) rec(EV.descartado, str('resize'), antes - kept.length, antes)
+    if (before - kept.length > 0) rec(EV.discarded, str('resize'), before - kept.length, before)
     this.replaceAll(kept, dims)
   }
 
@@ -151,9 +148,9 @@ export class World {
 
   endBatch() {
     if (this.batching === 0) {
-      // Un endBatch de más dejaba el contador negativo y markDirty se apagaba
-      // para siempre: la escena quedaba congelada sin ningún error.
-      rec(EV.invariante, NaN)
+      // An extra endBatch made the counter negative, permanently disabling
+      // markDirty — scene froze with no error.
+      rec(EV.invariant, NaN)
       return
     }
     if (--this.batching > 0) return
@@ -189,7 +186,7 @@ export class World {
     for (const cb of this.structureSubs) cb()
   }
 
-  /* ── suscripciones (useSyncExternalStore) ───────────────────────────── */
+  /* ── subscriptions (useSyncExternalStore) ─────────────────────────── */
 
   cellsOf(ck: ChunkKey): Set<VoxelKey> | undefined {
     return this.chunkCells.get(ck)
@@ -226,7 +223,7 @@ export class World {
     }
   }
 
-  /* ── consultas ──────────────────────────────────────────────────────── */
+  /* ── queries ───────────────────────────────────────────────────────── */
 
   counts(): Map<BlockId, number> {
     const m = new Map<BlockId, number>()
@@ -234,7 +231,6 @@ export class World {
     return m
   }
 
-  /** Capas (y) que tienen al menos un bloque, ordenadas. */
   occupiedLayers(): number[] {
     const s = new Set<number>()
     for (const k of this.voxels.keys()) s.add(keyY(k))

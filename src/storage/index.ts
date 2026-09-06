@@ -12,8 +12,8 @@ export function setSignedIn(v: boolean) {
 }
 
 /**
- * Regla: si Supabase está configurado Y hay sesión, la nube es la única fuente
- * de verdad. En cualquier otro caso, localStorage. Nunca las dos a la vez.
+ * Rule: if Supabase is configured AND signed in, cloud is the only source
+ * of truth; otherwise localStorage — never both.
  */
 export function activeStore(): DesignStore {
   return supabaseConfigured && signedIn ? cloudStore : localStore

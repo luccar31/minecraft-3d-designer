@@ -1,7 +1,7 @@
-/** Identificador namespaced de Minecraft, ej. "minecraft:oak_planks". */
+/** Namespaced Minecraft id, e.g. "minecraft:oak_planks". */
 export type BlockId = string
 
-/** Clave de voxel empaquetada: (x << 20) | (y << 10) | z. Cada eje 0..1023. */
+/** Packed voxel key: (x << 20) | (y << 10) | z. Each axis 0..1023. */
 export type VoxelKey = number
 
 export type Dims = { x: number; y: number; z: number }
@@ -23,7 +23,7 @@ export type SliceView = 'off' | 'below' | 'isolate'
 
 export type BoxSel = { min: Vec3; max: Vec3 }
 
-/** Delta de una edición, para el historial. */
+/** Delta of one edit, for the history stack. */
 export type CellDelta = { key: VoxelKey; prev: BlockId | undefined; next: BlockId | undefined }
 
 export type DesignMeta = {
@@ -35,7 +35,7 @@ export type DesignMeta = {
   updatedAt: string
 }
 
-/** Sobre serializado. Es a la vez el formato de nube y el de archivo .mcbp.json */
+/** Serialized envelope: both the cloud format and the .mcbp.json file format. */
 export type StoredDesign = {
   v: 1
   id: string
@@ -43,7 +43,7 @@ export type StoredDesign = {
   description: string
   dims: Dims
   palette: BlockId[]
-  /** base64( gzip( registros de 6 bytes: uint32 key + uint16 paletteIndex ) ) */
+  /** base64(gzip(6-byte records: uint32 key + uint16 paletteIndex)) */
   data: string
   blockCount: number
   createdAt: string

@@ -1,11 +1,6 @@
 /**
- * Lectura y exportación del buffer de telemetría.
- *
- * Tres salidas, para tres usos distintos:
- *  - `toText`   → pegar en un mensaje, leer de arriba abajo.
- *  - `toJSON`   → procesar con herramientas.
- *  - `toTrace`  → abrir en Perfetto (ui.perfetto.dev) o chrome://tracing y ver
- *                 la línea de tiempo real, con los gestos como spans.
+ * Three outputs: `toText` to paste in a message, `toJSON` for tooling,
+ * `toTrace` for a Perfetto timeline.
  */
 
 import {
@@ -14,20 +9,20 @@ import {
 } from './ring'
 import { modsLabel } from './events'
 
-/* ── resolución de campos ────────────────────────────────────────────────── */
+/* ── field resolution ────────────────────────────────────────────────────── */
 
-/** Formatea una ranura según el nombre declarado en el evento. */
+/** Formats a slot according to the name declared on the event. */
 function fieldValue(field: string, raw: number): string | null {
   if (Number.isNaN(raw)) return null
   if (field.startsWith('$')) return stringOf(raw)
   if (field === 'mods') return modsLabel(raw)
-  // Los flags se declaran como números pero se leen mejor como sí/no.
+  // Flags are declared as numbers but read better as yes/no.
   if (
-    field === 'borrar' || field === 'enTrazo' || field === 'aplicado' ||
-    field === 'activo' || field === 'abierto' || field === 'visible' ||
-    field === 'tiene' || field === 'ok' || field === 'perdido' ||
-    field === 'topeado' || field === 'cortar' || field === 'forzoCapa' ||
-    field === 'repetida' || field === 'enLote'
+    field === 'erase' || field === 'inStroke' || field === 'applied' ||
+    field === 'active' || field === 'open' || field === 'visible' ||
+    field === 'has' || field === 'ok' || field === 'lost' ||
+    field === 'clamped' || field === 'cut' || field === 'forcedLayer' ||
+    field === 'repeat' || field === 'batched'
   ) {
     return raw ? 'sí' : 'no'
   }
@@ -45,9 +40,9 @@ function payload(d: EventDef, base: number, obj: Record<string, unknown> | null)
   return parts.join(' ')
 }
 
-/* ── encabezado ──────────────────────────────────────────────────────────── */
+/* ── header ──────────────────────────────────────────────────────────────── */
 
-const NIVEL = ['apagado', 'acciones', 'normal', 'todo']
+const LEVEL_LABELS = ['apagado', 'acciones', 'normal', 'todo']
 
 export function header(): string {
   const n = size()
@@ -60,7 +55,7 @@ export function header(): string {
     `inicio sesión ${new Date(WALL0).toISOString()}  (t=0 del registro)`,
     `eventos       ${n} vivos de ${totalWritten()} escritos` +
       (drop ? `  · ${drop} descartados por capacidad (${capacity()})` : ''),
-    `nivel         ${NIVEL[getLevel()] ?? getLevel()}`,
+    `nivel         ${LEVEL_LABELS[getLevel()] ?? getLevel()}`,
     `buffer        ${(memoryBytes() / 1048576).toFixed(2)} MB`,
     `agente        ${nav?.userAgent ?? '—'}`,
     `pantalla      ${win ? `${win.innerWidth}×${win.innerHeight} dpr ${win.devicePixelRatio}` : '—'}`,
@@ -71,7 +66,7 @@ export function header(): string {
   ].join('\n')
 }
 
-/* ── texto ───────────────────────────────────────────────────────────────── */
+/* ── text ────────────────────────────────────────────────────────────────── */
 
 export function toText(): string {
   const out: string[] = [header()]
@@ -80,7 +75,7 @@ export function toText(): string {
     const delta = out.length > 1 ? t - last : 0
     last = t
     const ms = t.toFixed(1).padStart(9)
-    // El delta contra el evento anterior es lo que hace visible una pausa.
+    // Delta against the previous event is what makes a pause visible.
     const dt = delta >= 0.05 ? `+${delta.toFixed(1)}`.padStart(7) : ''.padStart(7)
     const g = gestureId ? `g${String(gestureId).padStart(3, '0')}` : '    '
     out.push(`${ms} ${dt} ${g} ${d.catName.padEnd(11)} ${d.name.padEnd(26)} ${payload(d, base, obj)}`.trimEnd())
@@ -105,43 +100,42 @@ export function toJSON(): string {
       t: +t.toFixed(3),
       cat: d.catName,
       ev: d.name,
-      ...(gestureId ? { gesto: gestureId } : {}),
+      ...(gestureId ? { gesture: gestureId } : {}),
       ...(Object.keys(data).length ? { data } : {}),
     })
   })
   return JSON.stringify(
     {
       meta: {
-        generado: new Date().toISOString(),
-        inicioSesion: new Date(WALL0).toISOString(),
-        origenPerf: T0,
-        eventos: size(),
-        escritos: totalWritten(),
-        descartados: droppedCount(),
-        capacidad: capacity(),
-        nivel: getLevel(),
-        agente: typeof navigator !== 'undefined' ? navigator.userAgent : null,
+        generated: new Date().toISOString(),
+        sessionStart: new Date(WALL0).toISOString(),
+        perfOrigin: T0,
+        events: size(),
+        written: totalWritten(),
+        discarded: droppedCount(),
+        capacity: capacity(),
+        level: getLevel(),
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : null,
       },
-      eventos: rows,
+      events: rows,
     },
     null,
     2,
   )
 }
 
-/* ── traza de Chrome / Perfetto ──────────────────────────────────────────── */
+/* ── Chrome / Perfetto trace ─────────────────────────────────────────────── */
 
 /**
- * Formato Trace Event de Chrome. Los gestos salen como spans asíncronos, los
- * frames como eventos completos con duración, y el resto como instantáneos.
- * Se abre en https://ui.perfetto.dev arrastrando el archivo.
+ * Chrome Trace format: gestures as async spans, frames as durations,
+ * everything else as instants.
  */
 export function toTrace(): string {
   const ev: unknown[] = []
-  const abiertos = new Map<number, number>()
+  const openGestures = new Map<number, number>()
 
   ev.push({ name: 'process_name', ph: 'M', pid: 1, tid: 1, args: { name: 'MC Blueprint' } })
-  ev.push({ name: 'thread_name', ph: 'M', pid: 1, tid: 1, args: { name: 'eventos' } })
+  ev.push({ name: 'thread_name', ph: 'M', pid: 1, tid: 1, args: { name: 'events' } })
   ev.push({ name: 'thread_name', ph: 'M', pid: 1, tid: 2, args: { name: 'frames' } })
 
   forEach((t, d, gestureId, base, obj) => {
@@ -155,7 +149,7 @@ export function toTrace(): string {
     }
     if (obj) Object.assign(args, obj)
 
-    if (d.name === 'frame' || d.name === 'frame.lento') {
+    if (d.name === 'frame' || d.name === 'frame.slow') {
       const dur = slot(base, 0)
       ev.push({
         name: 'frame', cat: 'frame', ph: 'X', pid: 1, tid: 2,
@@ -165,13 +159,13 @@ export function toTrace(): string {
       return
     }
 
-    if (gestureId && !abiertos.has(gestureId)) {
-      abiertos.set(gestureId, us)
-      ev.push({ name: `gesto ${gestureId}`, cat: 'gesto', ph: 'b', id: gestureId, pid: 1, tid: 1, ts: us })
+    if (gestureId && !openGestures.has(gestureId)) {
+      openGestures.set(gestureId, us)
+      ev.push({ name: `gesture ${gestureId}`, cat: 'gesture', ph: 'b', id: gestureId, pid: 1, tid: 1, ts: us })
     }
-    if (gestureId && d.name.startsWith('gesto.fin')) {
-      ev.push({ name: `gesto ${gestureId}`, cat: 'gesto', ph: 'e', id: gestureId, pid: 1, tid: 1, ts: us })
-      abiertos.delete(gestureId)
+    if (gestureId && d.name.startsWith('gesture.end')) {
+      ev.push({ name: `gesture ${gestureId}`, cat: 'gesture', ph: 'e', id: gestureId, pid: 1, tid: 1, ts: us })
+      openGestures.delete(gestureId)
     }
 
     ev.push({
@@ -180,23 +174,23 @@ export function toTrace(): string {
     })
   })
 
-  // Cerrar los gestos que quedaron abiertos, o Perfetto los descarta.
-  const fin = Math.round((size() ? 0 : 0) * 1000)
-  for (const [id, ts] of abiertos) {
-    ev.push({ name: `gesto ${id}`, cat: 'gesto', ph: 'e', id, pid: 1, tid: 1, ts: Math.max(ts, fin) })
+  // Close any gestures left open, or Perfetto discards them.
+  const closeTs = Math.round((size() ? 0 : 0) * 1000)
+  for (const [id, ts] of openGestures) {
+    ev.push({ name: `gesture ${id}`, cat: 'gesture', ph: 'e', id, pid: 1, tid: 1, ts: Math.max(ts, closeTs) })
   }
 
   return JSON.stringify({ traceEvents: ev, displayTimeUnit: 'ms' })
 }
 
-/* ── resumen ─────────────────────────────────────────────────────────────── */
+/* ── summary ─────────────────────────────────────────────────────────────── */
 
-export type Resumen = {
-  porEvento: { nombre: string; cat: string; n: number }[]
-  frames: { n: number; p50: number; p95: number; p99: number; peor: number; lentos: number } | null
-  errores: number
-  gestos: number
-  ventanaMs: number
+export type Summary = {
+  byEvent: { name: string; cat: string; n: number }[]
+  frames: { n: number; p50: number; p95: number; p99: number; worst: number; slow: number } | null
+  errors: number
+  gestures: number
+  windowMs: number
 }
 
 const pct = (arr: number[], p: number): number => {
@@ -205,11 +199,11 @@ const pct = (arr: number[], p: number): number => {
   return arr[i]
 }
 
-export function resumen(): Resumen {
+export function summary(): Summary {
   const counts = new Map<string, { cat: string; n: number }>()
   const frameMs: number[] = []
-  const gestos = new Set<number>()
-  let errores = 0
+  const gestures = new Set<number>()
+  let errors = 0
   let tMin = Infinity
   let tMax = -Infinity
 
@@ -219,8 +213,8 @@ export function resumen(): Resumen {
     const cur = counts.get(d.name)
     if (cur) cur.n++
     else counts.set(d.name, { cat: d.catName, n: 1 })
-    if (d.catName === 'error') errores++
-    if (gestureId) gestos.add(gestureId)
+    if (d.catName === 'error') errors++
+    if (gestureId) gestures.add(gestureId)
     if (d.name === 'frame') {
       const ms = slot(base, 0)
       if (!Number.isNaN(ms)) frameMs.push(ms)
@@ -230,8 +224,8 @@ export function resumen(): Resumen {
   frameMs.sort((a, b) => a - b)
 
   return {
-    porEvento: [...counts.entries()]
-      .map(([nombre, v]) => ({ nombre, cat: v.cat, n: v.n }))
+    byEvent: [...counts.entries()]
+      .map(([name, v]) => ({ name, cat: v.cat, n: v.n }))
       .sort((a, b) => b.n - a.n),
     frames: frameMs.length
       ? {
@@ -239,31 +233,31 @@ export function resumen(): Resumen {
           p50: +pct(frameMs, 50).toFixed(2),
           p95: +pct(frameMs, 95).toFixed(2),
           p99: +pct(frameMs, 99).toFixed(2),
-          peor: +frameMs[frameMs.length - 1].toFixed(2),
-          lentos: frameMs.filter((m) => m > 16.7).length,
+          worst: +frameMs[frameMs.length - 1].toFixed(2),
+          slow: frameMs.filter((m) => m > 16.7).length,
         }
       : null,
-    errores,
-    gestos: gestos.size,
-    ventanaMs: tMax > tMin ? +(tMax - tMin).toFixed(0) : 0,
+    errors,
+    gestures: gestures.size,
+    windowMs: tMax > tMin ? +(tMax - tMin).toFixed(0) : 0,
   }
 }
 
-export function resumenTexto(): string {
-  const r = resumen()
+export function summaryText(): string {
+  const r = summary()
   const out = [header(), '── resumen ──', '']
-  out.push(`ventana        ${(r.ventanaMs / 1000).toFixed(1)} s`)
-  out.push(`gestos         ${r.gestos}`)
-  out.push(`errores        ${r.errores}`)
+  out.push(`ventana        ${(r.windowMs / 1000).toFixed(1)} s`)
+  out.push(`gestos         ${r.gestures}`)
+  out.push(`errores        ${r.errors}`)
   if (r.frames) {
     out.push(
       `frames         ${r.frames.n}  ·  p50 ${r.frames.p50} ms  p95 ${r.frames.p95} ms  ` +
-        `p99 ${r.frames.p99} ms  peor ${r.frames.peor} ms  ·  ${r.frames.lentos} por encima de 16,7 ms`,
+        `p99 ${r.frames.p99} ms  peor ${r.frames.worst} ms  ·  ${r.frames.slow} por encima de 16,7 ms`,
     )
   }
   out.push('', '── eventos por tipo ──', '')
-  for (const e of r.porEvento) {
-    out.push(`${String(e.n).padStart(7)}  ${e.cat.padEnd(11)} ${e.nombre}`)
+  for (const e of r.byEvent) {
+    out.push(`${String(e.n).padStart(7)}  ${e.cat.padEnd(11)} ${e.name}`)
   }
   return out.join('\n') + '\n'
 }

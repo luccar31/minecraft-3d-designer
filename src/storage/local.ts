@@ -11,9 +11,9 @@ function readIndex(): DesignSummary[] {
     const raw = localStorage.getItem(INDEX)
     return raw ? (JSON.parse(raw) as DesignSummary[]) : []
   } catch (e) {
-    // Antes esto presentaba un localStorage corrupto como 'no tenés diseños':
-    // pérdida de datos disfrazada de estado normal.
-    recObj(EV.fallo, { donde: 'local.readIndex', mensaje: (e as Error).message })
+    // Used to present a corrupted localStorage as "no designs": data loss
+    // disguised as normal state.
+    recObj(EV.failure, { where: 'local.readIndex', message: (e as Error).message })
     return []
   }
 }

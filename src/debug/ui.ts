@@ -1,37 +1,29 @@
 /**
- * Sonda de interfaz por delegación.
- *
- * En lugar de instrumentar a mano cada `onClick` —sesenta y pico hoy, y uno
- * más cada vez que alguien agrega un botón— se escucha en la raíz, en fase de
- * captura, y se identifica el control que recibió el evento. Ventajas: no se
- * desactualiza, cubre lo que todavía no existe, y no ensucia los componentes.
- *
- * El nombre del control sale de lo que ya está en el DOM por accesibilidad
- * (`data-testid`, `aria-label`, `title`, el texto visible), así que no hay que
- * mantener un catálogo de ids en paralelo.
+ * UI probe by delegation instead of instrumenting every onClick by hand;
+ * reads existing DOM accessibility attributes for names.
  */
 
 import { rec, recObj, touchClock } from './ring'
 import { EV, packMods, str } from './events'
 
-/** Etiqueta estable y legible para un control. */
-function etiqueta(el: Element): string {
+/** Stable, readable label for a control. */
+function label(el: Element): string {
   const h = el as HTMLElement
   const test = h.dataset?.testid
   if (test) return test
   const aria = h.getAttribute?.('aria-label')
   if (aria) return aria.slice(0, 48)
-  const titulo = h.getAttribute?.('title')
-  if (titulo) return titulo.slice(0, 48)
+  const title = h.getAttribute?.('title')
+  if (title) return title.slice(0, 48)
   const txt = h.textContent?.trim().replace(/\s+/g, ' ')
   if (txt) return txt.slice(0, 48)
   const tag = el.tagName.toLowerCase()
-  const tipo = h.getAttribute?.('type')
-  return tipo ? `${tag}[${tipo}]` : tag
+  const type = h.getAttribute?.('type')
+  return type ? `${tag}[${type}]` : tag
 }
 
-/** Panel o región donde vive el control, para desambiguar nombres repetidos. */
-function contexto(el: Element): string {
+/** Panel or region the control lives in, to disambiguate repeated names. */
+function context(el: Element): string {
   let n: Element | null = el
   for (let i = 0; i < 8 && n; i++) {
     const cls = typeof n.className === 'string' ? n.className.split(/\s+/)[0] : ''
@@ -41,60 +33,60 @@ function contexto(el: Element): string {
   return 'app'
 }
 
-const INTERACTIVOS = 'button, input, select, textarea, a, [role="button"], [role="tab"]'
+const INTERACTIVE = 'button, input, select, textarea, a, [role="button"], [role="tab"]'
 
-let activo = false
+let active = false
 const off: (() => void)[] = []
 
-export function iniciarSondaUI(raiz: Document | HTMLElement = document) {
-  if (activo || typeof document === 'undefined') return
-  activo = true
+export function startUiProbe(root: Document | HTMLElement = document) {
+  if (active || typeof document === 'undefined') return
+  active = true
 
   const onClick = (e: Event) => {
     const t = e.target as Element | null
-    const ctl = t?.closest?.(INTERACTIVOS)
+    const ctl = t?.closest?.(INTERACTIVE)
     if (!ctl) return
     const h = ctl as HTMLElement & { disabled?: boolean }
     if (h.disabled) {
-      // Un click sobre un botón deshabilitado no produce ninguna acción. Sin
-      // esto, «apreté y no pasó nada» no deja rastro de haber sido apretado.
-      recObj(EV.fallo, { donde: 'ui/deshabilitado', control: etiqueta(ctl), panel: contexto(ctl) })
+      // A click on a disabled button does nothing; without this, "I
+      // clicked and nothing happened" leaves no trace.
+      recObj(EV.failure, { where: 'ui/disabled', control: label(ctl), panel: context(ctl) })
       return
     }
-    rec(EV.boton, str(etiqueta(ctl)), str(contexto(ctl)))
+    rec(EV.button, str(label(ctl)), str(context(ctl)))
   }
 
-  // `change` cubre selects y checkboxes; para texto se registra el largo y no
-  // el contenido, que puede ser el nombre de un diseño y no aporta al gesto.
+  // `change` covers selects/checkboxes; for text, logs length not content —
+  // often a design name, not useful here.
   const onChange = (e: Event) => {
     const t = e.target as HTMLInputElement | null
     if (!t || !t.tagName) return
-    const tipo = t.getAttribute?.('type')
-    if (tipo === 'range' || tipo === 'number') {
-      rec(EV.campo, str(etiqueta(t)), Number(t.value))
+    const type = t.getAttribute?.('type')
+    if (type === 'range' || type === 'number') {
+      rec(EV.field, str(label(t)), Number(t.value))
       return
     }
-    rec(EV.campo, str(etiqueta(t)), t.value?.length ?? NaN)
+    rec(EV.field, str(label(t)), t.value?.length ?? NaN)
   }
 
-  const onWheel = (e: WheelEvent) => rec(EV.rueda, e.deltaY, packMods(e))
+  const onWheel = (e: WheelEvent) => rec(EV.wheel, e.deltaY, packMods(e))
 
   const onPointerDownCapture = (e: PointerEvent) => {
-    // Registra el down aunque después nadie lo procese: es la diferencia entre
-    // «el evento no llegó» y «llegó y se descartó».
+    // Logs the down even if nothing handles it later — distinguishes
+    // "never arrived" from "arrived and got dropped".
     const t = e.target as Element | null
-    if (t?.closest?.(INTERACTIVOS)) return // ya lo cubre onClick
-    if (t?.tagName === 'CANVAS') return // lo cubre la instrumentación de Scene
-    rec(EV.punteroDown, str(e.pointerType || 'mouse'), e.clientX, e.clientY, e.button,
+    if (t?.closest?.(INTERACTIVE)) return // already covered by onClick
+    if (t?.tagName === 'CANVAS') return // covered by Scene's instrumentation
+    rec(EV.pointerDown, str(e.pointerType || 'mouse'), e.clientX, e.clientY, e.button,
       packMods(e), NaN)
   }
 
   const add = <K extends keyof DocumentEventMap>(
-    tipo: K, fn: (e: DocumentEventMap[K]) => void, capture = true,
+    type: K, fn: (e: DocumentEventMap[K]) => void, capture = true,
   ) => {
-    const envuelto = ((ev: Event) => { touchClock(); (fn as (e: Event) => void)(ev) }) as EventListener
-    raiz.addEventListener(tipo, envuelto, capture)
-    off.push(() => raiz.removeEventListener(tipo, envuelto, capture))
+    const wrapped = ((ev: Event) => { touchClock(); (fn as (e: Event) => void)(ev) }) as EventListener
+    root.addEventListener(type, wrapped, capture)
+    off.push(() => root.removeEventListener(type, wrapped, capture))
   }
 
   add('click', onClick)
@@ -103,8 +95,8 @@ export function iniciarSondaUI(raiz: Document | HTMLElement = document) {
   add('pointerdown', onPointerDownCapture as (e: Event) => void)
 }
 
-export function detenerSondaUI() {
+export function stopUiProbe() {
   for (const f of off) f()
   off.length = 0
-  activo = false
+  active = false
 }

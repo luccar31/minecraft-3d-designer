@@ -20,6 +20,7 @@
 - **No cambiar las claves de `window.__mcb`**: `store`, `buildSchem`, `buildGuide`, `tel`.
 - **La telemetría ya existe** en `src/debug/`. Los nombres exactos de eventos y campos se leen de `src/debug/events.ts`; no inventar nombres nuevos sin declararlos ahí primero.
 - **Umbrales**: 4 px con mouse o lápiz, 10 px con touch.
+- **En la fase `pending` la órbita va DESHABILITADA.** OrbitControls engancha sus listeners directo al canvas y no pasa por el sistema de eventos de R3F, así que `stopPropagation()` no lo frena: si se deja habilitada, la cámara deriva durante los 4–10 px previos a clasificar el gesto. Se rehabilita sólo en la transición a `navigating` y al salir por `up` o por `abort()`.
 - **`Space` transitorio**: 250 ms.
 - **Modo inicial**: `build`, siempre. No persiste entre sesiones.
 - Al terminar cada tarea, `npm run typecheck` tiene que pasar. Al terminar las tareas 8 en adelante, los 8 tests de `tests/editor.spec.ts` tienen que seguir verdes.

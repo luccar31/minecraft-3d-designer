@@ -3,8 +3,8 @@ import { getSupabase, setSignedIn, supabaseConfigured } from '../storage'
 import { useEditor } from '../state/store'
 
 /**
- * Login por magic link. Es lo que hace que un diseño guardado en la compu
- * aparezca en el celular: sin sesión no hay nube, y la app cae a localStorage.
+ * Magic-link login: lets a design saved on your computer show up on your
+ * phone via the cloud.
  */
 export function AuthPanel() {
   const [email, setEmail] = useState('')

@@ -1,12 +1,4 @@
-/**
- * Telemetría de MC Blueprint — fachada pública.
- *
- * Todo el resto de la app importa desde acá. Las piezas:
- *   ring.ts    buffer circular en typed arrays, sin allocations al registrar
- *   events.ts  catálogo de eventos, con sus campos y nivel de captura
- *   perf.ts    sondas de frames, tareas largas, memoria y entorno
- *   format.ts  exportación a texto, JSON y traza de Perfetto
- */
+/** MC Blueprint telemetry — public facade; everything else imports from here. */
 
 import {
   beginGesture, clear, currentGesture, endGesture, getLevel, getVersion, intern,
@@ -14,21 +6,21 @@ import {
   size, subscribe, touchClock, type Level,
 } from './ring'
 import { EV, packMods, str } from './events'
-import { resumen, resumenTexto, toJSON, toText, toTrace } from './format'
+import { summary, summaryText, toJSON, toText, toTrace } from './format'
 import {
-  attachRenderer, medir, registrarArranque, startFrames,
+  attachRenderer, measure, recordBoot, startFrames,
   startObservers, stopFrames, stopObservers, watchCanvas,
 } from './perf'
-import { detenerSondaUI, iniciarSondaUI } from './ui'
+import { startUiProbe, stopUiProbe } from './ui'
 
-export { EV, LEVEL, packMods, str, intern, rec, recObj, medir }
+export { EV, LEVEL, packMods, str, intern, rec, recObj, measure }
 export type { Level }
 export {
   beginGesture, endGesture, currentGesture, getLevel, setLevel, isPaused,
   setPaused, clear, size, subscribe, getVersion, memoryBytes, selfBenchmark,
   touchClock,
 }
-export { toText, toJSON, toTrace, resumen, resumenTexto }
+export { toText, toJSON, toTrace, summary, summaryText }
 export { attachRenderer, startFrames, watchCanvas }
 
 /* ── snapshots ───────────────────────────────────────────────────────────── */
@@ -37,47 +29,45 @@ type SnapshotSource = () => Record<string, unknown>
 let snapshotSource: SnapshotSource | null = null
 
 /**
- * El store registra acá su lector de estado. Se hace por inyección y no por
- * import para no crear un ciclo: el store ya importa la telemetría.
+ * Store registers its state reader here via injection, not import, to
+ * avoid a cycle with telemetry.
  */
 export function registerSnapshotSource(fn: SnapshotSource) {
   snapshotSource = fn
 }
 
-/** Vuelca el estado completo de la app al registro. */
-export function snapshot(motivo = 'manual') {
-  recObj(EV.snapshot, { motivo, ...(snapshotSource ? snapshotSource() : {}) })
+/** Dumps the app's full state to the log. */
+export function snapshot(reason = 'manual') {
+  recObj(EV.snapshot, { reason, ...(snapshotSource ? snapshotSource() : {}) })
 }
 
-/* ── nivel de captura ────────────────────────────────────────────────────── */
+/* ── capture level ───────────────────────────────────────────────────────── */
 
-export function cambiarNivel(a: Level) {
-  const de = getLevel()
-  if (de === a) return
+export function setCaptureLevel(a: Level) {
+  const from = getLevel()
+  if (from === a) return
   setLevel(a)
-  rec(EV.nivelCaptura, de, a)
+  rec(EV.captureLevel, from, a)
 }
 
-/* ── arranque ────────────────────────────────────────────────────────────── */
+/* ── boot ────────────────────────────────────────────────────────────────── */
 
-let iniciado = false
+let started = false
 
-/**
- * Enciende la telemetría. Idempotente: llamarlo dos veces no duplica sondas.
- */
-export function iniciarTelemetria() {
-  if (iniciado || typeof window === 'undefined') return
-  iniciado = true
-  registrarArranque()
+/** Turns telemetry on. Idempotent: calling it twice doesn't duplicate probes. */
+export function startTelemetry() {
+  if (started || typeof window === 'undefined') return
+  started = true
+  recordBoot()
   startObservers()
-  iniciarSondaUI()
-  // Un snapshot al cerrar deja el estado final aunque no se haya exportado.
+  startUiProbe()
+  // A snapshot on unload preserves the final state even if never exported.
   window.addEventListener('pagehide', () => snapshot('pagehide'), { once: true })
 }
 
-export function detenerTelemetria() {
+export function stopTelemetry() {
   stopFrames()
   stopObservers()
-  detenerSondaUI()
-  iniciado = false
+  stopUiProbe()
+  started = false
 }
