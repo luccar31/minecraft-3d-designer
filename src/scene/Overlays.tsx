@@ -1,17 +1,131 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import * as THREE from 'three'
-import type { Axis, BoxSel, Dims, Vec3 } from '../types'
+import type { Axis, BlockId, BoxSel, Dims, Vec3 } from '../types'
 import { blockDef } from '../blocks/palette'
+import { slotOf, slotUV } from '../blocks/atlas'
+import type { Resolution } from './picking'
 import type { World } from '../voxel/world'
 import { planeToWorld, worldToPlane } from '../voxel/ops'
+
+/**
+ * Built once and reused by scaling. These used to be rebuilt on every mouse
+ * move and never disposed, leaking GPU memory for as long as the tab lived.
+ */
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1)
+const UNIT_PLANE = new THREE.PlaneGeometry(1, 1)
+const UNIT_EDGES = new THREE.EdgesGeometry(UNIT_BOX)
 
 export function Cursor({ cell, color = '#ffffff' }: { cell: Vec3 | null; color?: string }) {
   if (!cell) return null
   return (
-    <lineSegments position={[cell.x + 0.5, cell.y + 0.5, cell.z + 0.5]} renderOrder={3}>
-      <edgesGeometry args={[new THREE.BoxGeometry(1.02, 1.02, 1.02)]} />
+    <lineSegments
+      geometry={UNIT_EDGES}
+      position={[cell.x + 0.5, cell.y + 0.5, cell.z + 0.5]}
+      scale={1.02}
+      renderOrder={3}
+    >
       <lineBasicMaterial color={color} depthTest={false} transparent opacity={0.95} />
     </lineSegments>
+  )
+}
+
+/** Orients the face quad along the hit normal. */
+function faceRotation(n: { x: number; y: number; z: number }): [number, number, number] {
+  if (n.y !== 0) return [-Math.PI / 2, 0, 0]
+  if (n.x !== 0) return [0, Math.PI / 2, 0]
+  return [0, 0, 0]
+}
+
+/** BoxGeometry face order: +x, -x, +y, -y, +z, -z. */
+const FACE_ORDER = ['side', 'side', 'top', 'bottom', 'side', 'side'] as const
+
+/** Remaps the unit box onto the active block's atlas tiles. */
+function useGhostGeometry(blockId: BlockId): THREE.BufferGeometry {
+  const geo = useMemo(() => {
+    const g = UNIT_BOX.clone()
+    const uv = g.getAttribute('uv') as THREE.BufferAttribute
+    const tex = blockDef(blockId).tex
+    for (let f = 0; f < FACE_ORDER.length; f++) {
+      const { u0, v0, size } = slotUV(slotOf(tex[FACE_ORDER[f]]))
+      for (let i = f * 4; i < f * 4 + 4; i++) {
+        uv.setXY(i, u0 + uv.getX(i) * size, v0 + uv.getY(i) * size)
+      }
+    }
+    uv.needsUpdate = true
+    return g
+  }, [blockId])
+  useEffect(() => () => geo.dispose(), [geo])
+  return geo
+}
+
+/**
+ * Placement preview: ghost block, supporting face and erase tint. Reads the
+ * same `Resolution` the edit will use, so preview and edit cannot disagree.
+ */
+export function Preview({ res, blockId, atlas }: {
+  res: Resolution | null
+  blockId: BlockId
+  atlas: THREE.Texture
+}) {
+  const ghostGeo = useGhostGeometry(blockId)
+  const ghostMat = useMemo(
+    () => new THREE.MeshLambertMaterial({
+      map: atlas, transparent: true, opacity: 0.45, depthWrite: false,
+    }),
+    [atlas],
+  )
+  const faceMat = useMemo(
+    () => new THREE.MeshBasicMaterial({
+      color: '#ffffff', transparent: true, opacity: 0.28,
+      depthWrite: false, side: THREE.DoubleSide,
+    }),
+    [],
+  )
+  const eraseMat = useMemo(
+    () => new THREE.MeshBasicMaterial({
+      color: '#ff6b6b', transparent: true, opacity: 0.4, depthWrite: false,
+    }),
+    [],
+  )
+
+  useEffect(() => () => {
+    ghostMat.dispose()
+    faceMat.dispose()
+    eraseMat.dispose()
+  }, [ghostMat, faceMat, eraseMat])
+
+  if (!res || !res.valid || !res.chosen || res.action === 'none') return null
+  const c = res.chosen
+  const at: [number, number, number] = [c.x + 0.5, c.y + 0.5, c.z + 0.5]
+
+  return (
+    <>
+      {res.action === 'place' && (
+        <mesh geometry={ghostGeo} material={ghostMat} position={at} raycast={() => null} />
+      )}
+      {res.action === 'erase' && (
+        <mesh
+          geometry={UNIT_BOX}
+          material={eraseMat}
+          position={at}
+          scale={1.02}
+          raycast={() => null}
+        />
+      )}
+      {res.action === 'place' && res.face && (
+        <mesh
+          geometry={UNIT_PLANE}
+          material={faceMat}
+          position={[
+            res.face.center.x + res.face.normal.x * 0.01,
+            res.face.center.y + res.face.normal.y * 0.01,
+            res.face.center.z + res.face.normal.z * 0.01,
+          ]}
+          rotation={faceRotation(res.face.normal)}
+          raycast={() => null}
+        />
+      )}
+    </>
   )
 }
 
@@ -34,12 +148,10 @@ export function SelectionBox({ sel }: { sel: BoxSel | null }) {
   const sz = sel.max.z - sel.min.z + 1
   return (
     <group position={[sel.min.x + sx / 2, sel.min.y + sy / 2, sel.min.z + sz / 2]}>
-      <mesh renderOrder={2}>
-        <boxGeometry args={[sx, sy, sz]} />
+      <mesh geometry={UNIT_BOX} scale={[sx, sy, sz]} renderOrder={2}>
         <meshBasicMaterial color="#4ea1ff" transparent opacity={0.16} depthWrite={false} />
       </mesh>
-      <lineSegments renderOrder={3}>
-        <edgesGeometry args={[new THREE.BoxGeometry(sx, sy, sz)]} />
+      <lineSegments geometry={UNIT_EDGES} scale={[sx, sy, sz]} renderOrder={3}>
         <lineBasicMaterial color="#4ea1ff" depthTest={false} />
       </lineSegments>
     </group>
@@ -139,8 +251,13 @@ export function GhostSlice({
   return (
     <group>
       {cells.map(({ p, color }) => (
-        <mesh key={`${p.x}-${p.y}-${p.z}`} position={[p.x + 0.5, p.y + 0.5, p.z + 0.5]} raycast={() => null}>
-          <boxGeometry args={[0.98, 0.98, 0.98]} />
+        <mesh
+          key={`${p.x}-${p.y}-${p.z}`}
+          geometry={UNIT_BOX}
+          scale={0.98}
+          position={[p.x + 0.5, p.y + 0.5, p.z + 0.5]}
+          raycast={() => null}
+        >
           <meshBasicMaterial color={color} transparent opacity={0.22} depthWrite={false} />
         </mesh>
       ))}
@@ -158,8 +275,13 @@ export function AnchorMarker({
   if (!anchor) return null
   const p = planeToWorld({ axis, index }, anchor.u, anchor.v)
   return (
-    <mesh position={[p.x + 0.5, p.y + 0.5, p.z + 0.5]} raycast={() => null} renderOrder={3}>
-      <boxGeometry args={[1.04, 1.04, 1.04]} />
+    <mesh
+      geometry={UNIT_BOX}
+      scale={1.04}
+      position={[p.x + 0.5, p.y + 0.5, p.z + 0.5]}
+      raycast={() => null}
+      renderOrder={3}
+    >
       <meshBasicMaterial color="#ffcf4a" transparent opacity={0.5} depthTest={false} />
     </mesh>
   )

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { addAfterEffect, addEffect, Canvas, useThree, type ThreeEvent } from '@react-three/fiber'
 import { OrbitControls } from '@react-three/drei'
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib'
@@ -6,13 +6,15 @@ import * as THREE from 'three'
 import { useEditor } from '../state/store'
 import { getAtlasTexture } from '../blocks/atlas'
 import { Chunks } from './Chunks'
-import { AnchorMarker, Cursor, GhostSlice, GridBounds, SelectionBox, SlicePlane } from './Overlays'
+import {
+  AnchorMarker, Cursor, GhostSlice, GridBounds, Preview, SelectionBox, SlicePlane,
+} from './Overlays'
 import { worldToPlane } from '../voxel/ops'
 import {
   initialState, step,
   type Cell, type Ctx, type GestureState, type Input, type Mods, type Output,
 } from './gesture'
-import { resolveCell, type Hit, type HitKind, type Resolution } from './picking'
+import { resolveCell, type Action, type Hit, type HitKind, type Resolution } from './picking'
 import {
   attachRenderer, beginGesture, endGesture, EV, packMods, rec, startFrames, str,
   touchClock, watchCanvas,
@@ -20,6 +22,10 @@ import {
 
 const NORMAL_MATRIX = new THREE.Matrix3()
 const NO_MODS: Mods = { shift: false, alt: false, ctrl: false, meta: false }
+
+const CURSOR_COLOR: Record<Action, string> = {
+  place: '#ffffff', erase: '#ff6b6b', pick: '#ffcf4a', none: '#ffffff',
+}
 
 function worldNormal(e: ThreeEvent<PointerEvent>): THREE.Vector3 {
   if (!e.face) return new THREE.Vector3(0, 1, 0)
@@ -125,6 +131,7 @@ function Editor() {
   const gestureT0 = useRef(0)
   const gestureCells = useRef(0)
   const lastOrbit = useRef(true)
+  const [preview, setPreview] = useState<Resolution | null>(null)
 
   const hitFrom = useCallback((e: ThreeEvent<PointerEvent>): Hit => {
     const name = e.object.name
@@ -296,6 +303,7 @@ function Editor() {
     const res = resolveCell(hit, modsOf(e), s.tool, s.world.dims)
     pendingRes.current = res
     lastHit.current = hit
+    setPreview(res)
     if (res.valid && res.chosen) {
       rec(EV.hover, res.chosen.x, res.chosen.y, res.chosen.z, str(hit.kind))
       s.setHover(res.chosen)
@@ -307,7 +315,36 @@ function Editor() {
 
   const clearHover = useCallback(() => {
     rec(EV.hoverNone)
+    lastHit.current = null
+    pendingRes.current = null
+    setPreview(null)
     useEditor.getState().setHover(null)
+  }, [])
+
+  // Shift and Alt change the action without moving the pointer, so no
+  // pointermove arrives to refresh the preview: recompute on the key itself.
+  useEffect(() => {
+    const recompute = (e: KeyboardEvent) => {
+      if (e.key !== 'Shift' && e.key !== 'Alt') return
+      const hit = lastHit.current
+      if (!hit || gesture.current.phase !== 'idle') return
+      const s = useEditor.getState()
+      const res = resolveCell(
+        hit,
+        { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey, meta: e.metaKey },
+        s.tool,
+        s.world.dims,
+      )
+      pendingRes.current = res
+      setPreview(res)
+      s.setHover(res.valid ? res.chosen : null)
+    }
+    window.addEventListener('keydown', recompute)
+    window.addEventListener('keyup', recompute)
+    return () => {
+      window.removeEventListener('keydown', recompute)
+      window.removeEventListener('keyup', recompute)
+    }
   }, [])
 
   // Registered once: attaching them inside onDown, like the old code did,
@@ -321,6 +358,7 @@ function Editor() {
       const p = rayPointOnDragPlane(ev)
       const cell = p ? cellFromDragPlane(p) : null
       if (cell) useEditor.getState().setHover(cell)
+      setPreview(pendingRes.current)
       feed({ kind: 'move', x: ev.clientX, y: ev.clientY, cell })
     }
     const onUp = (ev: PointerEvent) => {
@@ -412,7 +450,9 @@ function Editor() {
         </>
       )}
 
-      <Cursor cell={store.hover} color={store.tool === 'eraser' ? '#ff6b6b' : '#ffffff'} />
+      {/* No hover means no cell under the pointer: nothing to preview. */}
+      <Preview res={store.hover ? preview : null} blockId={store.block} atlas={atlas} />
+      <Cursor cell={store.hover} color={CURSOR_COLOR[preview?.action ?? 'none']} />
       <SelectionBox sel={store.selection} />
       <AnchorMarker anchor={store.anchor} axis={store.sliceAxis} index={store.sliceIndex} />
     </>
@@ -445,6 +485,10 @@ export function Scene() {
       onPointerMissed={(e) => {
         rec(EV.pointerNoTarget, (e as PointerEvent).clientX, (e as PointerEvent).clientY)
         cancel()
+        // Orbiting can leave the pointer off the build without a pointerout,
+        // and the cursor would stay floating in the void.
+        rec(EV.hoverNone)
+        useEditor.getState().setHover(null)
       }}
       onContextMenu={(e) => e.preventDefault()}
       data-testid="scene-canvas"

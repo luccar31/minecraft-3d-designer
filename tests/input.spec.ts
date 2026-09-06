@@ -96,6 +96,28 @@ test('el cursor y la edición resuelven a la misma celda', async ({ page }) => {
   expect(written).toBe(true)
 })
 
+test('apretar Shift sin mover el mouse cambia la celda apuntada', async ({ page }) => {
+  await ready(page)
+  await platform(page)
+  const box = (await page.locator('canvas').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.waitForTimeout(200)
+  const placing = await page.evaluate(() => window.__mcb.store.getState().hover)
+
+  await page.keyboard.down('Shift')
+  await page.waitForTimeout(200)
+  const erasing = await page.evaluate(() => window.__mcb.store.getState().hover)
+  await page.keyboard.up('Shift')
+  await page.waitForTimeout(200)
+  const back = await page.evaluate(() => window.__mcb.store.getState().hover)
+
+  // Placing aims one cell above the block Shift+click would erase.
+  expect(placing).not.toBeNull()
+  expect(erasing).not.toBeNull()
+  expect(erasing!.y).toBe(placing!.y - 1)
+  expect(back).toEqual(placing)
+})
+
 test('en modo capa, un click dibuja en la celda de la capa activa', async ({ page }) => {
   await ready(page)
   await page.evaluate(() => {
