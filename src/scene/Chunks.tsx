@@ -4,6 +4,9 @@ import { CHUNK } from '../types'
 import { buildChunkGeometry } from '../voxel/mesher'
 import { chunkX, chunkY, chunkZ, type ChunkKey, type World } from '../voxel/world'
 
+const MESH_RAYCAST = THREE.Mesh.prototype.raycast
+const NO_RAYCAST = () => null
+
 function ChunkMesh({
   world, ck, opaqueMat, transMat, pickable,
 }: {
@@ -34,18 +37,20 @@ function ChunkMesh({
   )
 
   const pos: [number, number, number] = [chunkX(ck) * CHUNK, chunkY(ck) * CHUNK, chunkZ(ck) * CHUNK]
-  const noRaycast = pickable ? undefined : () => null
+  // Always a function: `raycast={undefined}` writes an own property that
+  // shadows Mesh.prototype.raycast, and every later pick throws.
+  const raycast = pickable ? MESH_RAYCAST : NO_RAYCAST
 
   return (
     <group position={pos}>
       {geo.opaque && (
-        <mesh geometry={geo.opaque} material={opaqueMat} raycast={noRaycast} castShadow receiveShadow />
+        <mesh geometry={geo.opaque} material={opaqueMat} raycast={raycast} castShadow receiveShadow />
       )}
       {geo.transparent && (
         <mesh
           geometry={geo.transparent}
           material={transMat}
-          raycast={noRaycast}
+          raycast={raycast}
           renderOrder={1}
         />
       )}
