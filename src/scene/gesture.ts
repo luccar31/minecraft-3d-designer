@@ -48,6 +48,14 @@ export const initialState: GestureState = {
 
 const idle = (): GestureState => ({ ...initialState })
 
+export const MOUSE_THRESHOLD_PX = 4
+export const TOUCH_THRESHOLD_PX = 10
+
+const thresholdFor = (pointerType: string) =>
+  pointerType === 'touch' ? TOUCH_THRESHOLD_PX : MOUSE_THRESHOLD_PX
+
+const keyOf = (c: Cell | null) => (c ? `${c.x},${c.y},${c.z}` : '')
+
 export function step(
   state: GestureState,
   input: Input,
@@ -68,6 +76,35 @@ export function step(
     }
   }
 
+  if (input.kind === 'move' && state.phase === 'pending') {
+    const dx = input.x - state.startX
+    const dy = input.y - state.startY
+    if (Math.hypot(dx, dy) <= thresholdFor(state.pointerType)) {
+      return { state, out: { phase: 'pending', orbitEnabled: true } }
+    }
+    const commit: Cell[] = []
+    if (state.candidate) commit.push(state.candidate)
+    if (input.cell && keyOf(input.cell) !== keyOf(state.candidate)) commit.push(input.cell)
+    return {
+      state: { ...state, phase: 'painting', lastKey: keyOf(input.cell ?? state.candidate) },
+      out: {
+        phase: 'painting', orbitEnabled: false, openStroke: true,
+        classified: 'drag', commit,
+      },
+    }
+  }
+
+  if (input.kind === 'move' && state.phase === 'painting') {
+    const key = keyOf(input.cell)
+    if (!input.cell || key === state.lastKey) {
+      return { state, out: { phase: 'painting', orbitEnabled: false } }
+    }
+    return {
+      state: { ...state, lastKey: key },
+      out: { phase: 'painting', orbitEnabled: false, commit: [input.cell] },
+    }
+  }
+
   if (input.kind === 'up' && state.phase === 'pending') {
     return {
       state: idle(),
@@ -81,5 +118,15 @@ export function step(
     }
   }
 
-  return { state, out: { phase: state.phase, orbitEnabled: true } }
+  if (input.kind === 'up' && state.phase === 'painting') {
+    return {
+      state: idle(),
+      out: {
+        phase: 'idle', orbitEnabled: true, release: state.pointerId ?? undefined,
+        closeStroke: true, classified: 'drag',
+      },
+    }
+  }
+
+  return { state, out: { phase: state.phase, orbitEnabled: state.phase !== 'painting' } }
 }
