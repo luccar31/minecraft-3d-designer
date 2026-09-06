@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
-import { initialState, step, type Cell, type Ctx, type Mods } from '../src/scene/gesture'
+import { initialState, step, type Cell, type Ctx, type Input, type Mods } from '../src/scene/gesture'
 
 const NO_MODS: Mods = { shift: false, alt: false, ctrl: false, meta: false }
 const BUILD: Ctx = { mode: 'build', dragTool: true }
+const NAVIGATE: Ctx = { mode: 'navigate', dragTool: true }
+const CLICK_TOOL: Ctx = { mode: 'build', dragTool: false }
 
 test('un down seguido de up sin movimiento es un click y commitea una celda', () => {
   const down = step(initialState, {
@@ -113,4 +115,65 @@ test('abortar dos veces seguidas es inocuo', () => {
 
   expect(c.state.phase).toBe('idle')
   expect(c.out.orbitEnabled).toBe(true)
+})
+
+test('INVARIANTE: en modo navigate ninguna entrada produce una escritura', () => {
+  const secuencia: Input[] = [
+    { kind: 'down', pointerId: 1, pointerType: 'mouse', button: 0,
+      x: 100, y: 100, cell: { x: 1, y: 0, z: 1 }, mods: NO_MODS },
+    { kind: 'move', x: 140, y: 130, cell: { x: 4, y: 0, z: 3 } },
+    { kind: 'move', x: 180, y: 160, cell: { x: 8, y: 0, z: 6 } },
+    { kind: 'up', x: 180, y: 160 },
+  ]
+
+  let s = initialState
+  for (const input of secuencia) {
+    const r = step(s, input, NAVIGATE)
+    expect(r.out.commit ?? []).toEqual([])
+    expect(r.out.openStroke).toBeUndefined()
+    s = r.state
+  }
+  expect(s.phase).toBe('idle')
+})
+
+test('en modo navigate el down va directo a navigating y no captura', () => {
+  const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), NAVIGATE)
+  expect(a.state.phase).toBe('navigating')
+  expect(a.out.orbitEnabled).toBe(true)
+  expect(a.out.capture).toBeUndefined()
+})
+
+test('el botón del medio navega aunque el modo sea build', () => {
+  const a = step(initialState, { ...downAt(100, 100, { x: 1, y: 0, z: 1 }), button: 1 }, BUILD)
+  expect(a.state.phase).toBe('navigating')
+  expect(a.out.commit).toBeUndefined()
+})
+
+test('en build, un down sobre nada va a la cámara', () => {
+  const a = step(initialState, downAt(100, 100, null), BUILD)
+  expect(a.state.phase).toBe('navigating')
+})
+
+test('con una herramienta de click, arrastrar navega en vez de pintar', () => {
+  const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), CLICK_TOOL)
+  expect(a.state.phase).toBe('pending')
+
+  const b = step(a.state, { kind: 'move', x: 130, y: 100, cell: { x: 4, y: 0, z: 1 } }, CLICK_TOOL)
+  expect(b.state.phase).toBe('navigating')
+  expect(b.out.commit).toBeUndefined()
+  expect(b.out.openStroke).toBeUndefined()
+})
+
+test('con una herramienta de click, un click sí commitea', () => {
+  const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), CLICK_TOOL)
+  const b = step(a.state, { kind: 'up', x: 100, y: 100 }, CLICK_TOOL)
+  expect(b.out.commit).toEqual([{ x: 1, y: 0, z: 1 }])
+})
+
+test('soltar tras navegar vuelve a idle sin escribir', () => {
+  const a = step(initialState, downAt(100, 100, null), BUILD)
+  const b = step(a.state, { kind: 'up', x: 100, y: 100 }, BUILD)
+  expect(b.state.phase).toBe('idle')
+  expect(b.out.commit).toBeUndefined()
+  expect(b.out.classified).toBe('camera')
 })
