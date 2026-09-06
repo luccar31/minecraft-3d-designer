@@ -194,6 +194,25 @@ test('la goma sobre el piso vacío no apunta debajo de la grilla', async ({ page
   expect(await page.evaluate(() => window.__mcb.store.getState().hover)).toBeNull()
 })
 
+test('encuadrar con un solo bloque no mete la cámara adentro', async ({ page }) => {
+  await ready(page)
+  const dist = await page.evaluate(async () => {
+    const st = () => window.__mcb.store.getState()
+    st().newDesign({ x: 16, y: 12, z: 16 }, 'Uno')
+    st().paintAt({ x: 8, y: 0, z: 8 }, false)
+    st().requestFit()
+    await new Promise((r) => setTimeout(r, 600))
+    const log = window.__mcb.tel.toJSON()
+    const events = JSON.parse(log).events as { ev: string; data?: Record<string, number> }[]
+    const pose = events.filter((e) => e.ev === 'camera.pose').pop()
+    if (!pose?.data) return null
+    const dx = pose.data.x - 8.5, dy = pose.data.y - 0.5, dz = pose.data.z - 8.5
+    return Math.sqrt(dx * dx + dy * dy + dz * dz)
+  })
+  expect(dist).not.toBeNull()
+  expect(dist!).toBeGreaterThan(6)
+})
+
 test('en navigate, el registro no contiene ninguna escritura durante el gesto', async ({ page }) => {
   await ready(page)
   await platform(page)

@@ -52,7 +52,10 @@ function ViewFitter() {
       ? new THREE.Vector3(b.max[0] + 1, b.max[1] + 1, b.max[2] + 1)
       : new THREE.Vector3(world.dims.x, world.dims.y, world.dims.z)
     const center = min.clone().add(max).multiplyScalar(0.5)
-    const radius = max.clone().sub(min).length() / 2 || 8
+    // With a tiny build the radius tends to zero and the camera ends up
+    // inside the block.
+    const MIN_RADIUS = 4
+    const radius = Math.max(MIN_RADIUS, max.clone().sub(min).length() / 2)
     const cam = camera as THREE.PerspectiveCamera
     const dist = (radius / Math.sin((cam.fov * Math.PI) / 360)) * 1.05
     const dir = new THREE.Vector3(0.72, 0.58, 0.9).normalize()
