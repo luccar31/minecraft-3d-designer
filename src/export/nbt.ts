@@ -1,4 +1,4 @@
-/** Escritor NBT big-endian, sólo lo necesario para Sponge Schematic v2. */
+/** Big-endian NBT writer, just enough for Sponge Schematic v2. */
 
 export type NbtValue =
   | { t: 'byte'; v: number }
@@ -99,7 +99,7 @@ function writePayload(w: Writer, val: NbtValue) {
   }
 }
 
-/** Serializa un compound con nombre como raíz del archivo. */
+/** Serializes a named compound as the file's root. */
 export function writeNamedCompound(name: string, root: NbtValue & { t: 'compound' }): Uint8Array {
   const w = new Writer()
   w.u8(TAG.compound)
@@ -108,7 +108,7 @@ export function writeNamedCompound(name: string, root: NbtValue & { t: 'compound
   return w.done()
 }
 
-/** LEB128 sin signo, como usa BlockData de Sponge. */
+/** Unsigned LEB128, as used by Sponge's BlockData. */
 export function varint(n: number, out: number[]) {
   let v = n >>> 0
   do {

@@ -3,7 +3,7 @@ import type { BlockId, DesignMeta } from '../types'
 import { blockDef } from '../blocks/palette'
 import type { World } from '../voxel/world'
 
-export type LayerGrid = (BlockId | null)[][] // [dx][dz], recortado al bounding box
+export type LayerGrid = (BlockId | null)[][] // [dx][dz], cropped to the bounding box
 
 export type GuideStep = {
   n: number
@@ -12,7 +12,7 @@ export type GuideStep = {
   repeat: number
   grid: LayerGrid
   below: LayerGrid | null
-  counts: [BlockId, number][] // de UNA capa
+  counts: [BlockId, number][] // for a single layer
   blocksInStep: number
 }
 
@@ -21,8 +21,8 @@ export type Guide = {
   legend: Map<BlockId, string>
   totals: [BlockId, number][]
   totalBlocks: number
-  width: number // en X
-  depth: number // en Z
+  width: number // along X
+  depth: number // along Z
   originX: number
   originZ: number
   height: number
@@ -44,13 +44,8 @@ function sameGrid(a: LayerGrid, b: LayerGrid): boolean {
 }
 
 /**
- * Construye la guía capa por capa.
- *
- * Dos decisiones que hacen la diferencia al construir de verdad:
- *  - Todas las capas se recortan al MISMO bounding box, así el marco no se
- *    mueve entre pasos y se puede alinear a ojo.
- *  - Capas consecutivas idénticas se fusionan en un paso con "repetir N veces".
- *    Una torre de 20 niveles iguales pasa de 20 pasos a 1.
+ * Layers share ONE bounding box so the frame doesn't shift; identical
+ * consecutive layers merge into a single "repeat N" step.
  */
 export function buildGuide(world: World): Guide {
   const __t0 = performance.now()
@@ -60,7 +55,7 @@ export function buildGuide(world: World): Guide {
     width: 0, depth: 0, originX: 0, originZ: 0, height: 0,
   }
   if (!b) {
-    rec(EV.medicion, str('buildGuide/vacio'), performance.now() - __t0)
+    rec(EV.measurement, str('buildGuide/empty'), performance.now() - __t0)
     return empty
   }
 
@@ -87,7 +82,6 @@ export function buildGuide(world: World): Guide {
     if (!isEmpty(g)) raw.push({ y, grid: g })
   }
 
-  // Fusión de capas consecutivas idénticas.
   const merged: { fromY: number; toY: number; grid: LayerGrid }[] = []
   for (const r of raw) {
     const last = merged[merged.length - 1]
@@ -126,7 +120,7 @@ export function buildGuide(world: World): Guide {
   const legend = new Map<BlockId, string>()
   sortedTotals.forEach(([id], i) => legend.set(id, codeFor(i)))
 
-  rec(EV.medicion, str('buildGuide'), performance.now() - __t0)
+  rec(EV.measurement, str('buildGuide'), performance.now() - __t0)
 
   return {
     steps,
@@ -141,7 +135,7 @@ export function buildGuide(world: World): Guide {
   }
 }
 
-/** "3 stacks + 17" — la unidad en la que se piensa el inventario. */
+/** "3 stacks + 17" — how inventory counts are naturally thought of. */
 export function stacksLabel(n: number): string {
   const s = Math.floor(n / 64)
   const r = n % 64
@@ -149,7 +143,7 @@ export function stacksLabel(n: number): string {
   return r === 0 ? `${s} stack${s > 1 ? 's' : ''}` : `${s} stack${s > 1 ? 's' : ''} + ${r}`
 }
 
-/* ── documento imprimible ───────────────────────────────────────────────── */
+/* ── printable document ───────────────────────────────────────────────── */
 
 const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -165,7 +159,7 @@ function layerSvg(step: GuideStep, guide: Guide, cell = 24): string {
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" class="layer">`)
   parts.push(`<rect width="${w}" height="${h}" fill="#ffffff"/>`)
 
-  // Capa anterior como fantasma, para alinear.
+  // Previous layer as a ghost, for alignment.
   if (step.below) {
     for (let dx = 0; dx < W; dx++) {
       for (let dz = 0; dz < D; dz++) {
@@ -191,7 +185,7 @@ function layerSvg(step: GuideStep, guide: Guide, cell = 24): string {
     }
   }
 
-  // Grilla + reglas de coordenadas reales.
+  // Grid lines plus real-coordinate rulers.
   for (let dx = 0; dx <= W; dx++) {
     const x = pad + dx * cell
     parts.push(`<line x1="${x}" y1="${pad}" x2="${x}" y2="${pad + D * cell}" stroke="#cfcfcf" stroke-width="${dx % 4 === 0 ? 1.4 : 0.6}"/>`)
@@ -310,10 +304,10 @@ export function openPrintableGuide(guide: Guide, meta: DesignMeta) {
   const html = guideToHtml(guide, meta)
   const blob = new Blob([html], { type: 'text/html' })
   const url = URL.createObjectURL(blob)
-  const ventana = window.open(url, '_blank', 'noopener')
-  // Si el bloqueador de popups actúa, window.open devuelve null y hasta ahora
-  // el botón simplemente no hacía nada: sin error, sin aviso, sin registro.
-  if (!ventana) rec(EV.popupBloqueado, str('guia-imprimible'))
-  rec(EV.exportar, str('guia-html'), html.length, performance.now() - t0)
+  const popup = window.open(url, '_blank', 'noopener')
+  // If the popup blocker fires, `window.open` returns null; this used to
+  // fail with no error or log.
+  if (!popup) rec(EV.popupBlocked, str('printable-guide'))
+  rec(EV.exportDesign, str('guide-html'), html.length, performance.now() - t0)
   setTimeout(() => URL.revokeObjectURL(url), 60000)
 }

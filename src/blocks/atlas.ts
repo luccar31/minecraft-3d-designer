@@ -6,7 +6,7 @@ export const TILE = 32
 export const COLS = 16
 export const ATLAS_PX = TILE * COLS
 
-/* ── utilidades ─────────────────────────────────────────────────────────── */
+/* ── utilities ──────────────────────────────────────────────────────────── */
 
 const specKey = (s: TexSpec) => `${s.pattern}|${s.color}|${s.accent ?? ''}`
 
@@ -40,7 +40,7 @@ function hexToRgb(hex: string): [number, number, number] {
 
 const clamp = (v: number) => (v < 0 ? 0 : v > 255 ? 255 : v | 0)
 
-/* ── render de un tile ──────────────────────────────────────────────────── */
+/* ── tile rendering ─────────────────────────────────────────────────────── */
 
 type Px = { r: number; g: number; b: number; a: number }
 
@@ -51,7 +51,7 @@ function renderTile(spec: TexSpec): Uint8ClampedArray<ArrayBuffer> {
   const [br, bg, bb] = hexToRgb(spec.color)
   const [ar, ag, ab] = hexToRgb(spec.accent ?? spec.color)
 
-  // Ruido pre-generado, estable por tile.
+  // Pre-generated noise, stable per tile.
   const n = new Float32Array(S * S)
   for (let i = 0; i < n.length; i++) n[i] = rnd() * 2 - 1
   const n2 = new Float32Array(S * S)
@@ -67,7 +67,7 @@ function renderTile(spec: TexSpec): Uint8ClampedArray<ArrayBuffer> {
   const base = (d: number, a = 255): Px => ({ r: br + d, g: bg + d, b: bb + d, a })
   const acc = (d: number, a = 255): Px => ({ r: ar + d, g: ag + d, b: ab + d, a })
 
-  // Blobs reutilizables para cobble / gravel / moss.
+  // Reusable blobs for cobble/gravel/moss.
   const blobs: { cx: number; cy: number; r: number; d: number }[] = []
   if (spec.pattern === 'cobble' || spec.pattern === 'gravel' || spec.pattern === 'moss') {
     const count = spec.pattern === 'gravel' ? 14 : 9
@@ -119,14 +119,14 @@ function renderTile(spec: TexSpec): Uint8ClampedArray<ArrayBuffer> {
           break
 
         case 'quartz': {
-          // Estrías verticales finas.
+          // Thin vertical striations.
           const stripe = ((x * 7919) % 5) - 2
           put(x, y, base(nv * 3 + stripe * 2))
           break
         }
 
         case 'terracotta': {
-          // Vetas horizontales.
+          // Horizontal veins.
           const band = Math.sin(y * 0.9 + hashStr(spec.color) % 7) * 6
           const useAcc = nu > 0.82
           put(x, y, useAcc ? acc(nv * 5) : base(nv * 6 + band))
@@ -197,14 +197,14 @@ function renderTile(spec: TexSpec): Uint8ClampedArray<ArrayBuffer> {
             break
           }
           const bandShade = ((band * 11) % 5) * 3 - 6
-          // Veta vertical.
+          // Vertical grain.
           const grain = ((x * 31 + band * 17) % 13) < 2 ? -9 : 0
           put(x, y, base(nv * 6 + bandShade + grain))
           break
         }
 
         case 'logSide': {
-          // Corteza: variación fuerte por columna, suave por fila.
+          // Bark: strong variation per column, soft per row.
           const colShade = (((x * 2654435761) >>> 0) % 100) / 100
           const d = (colShade - 0.5) * 26 + nv * 5
           put(x, y, colShade > 0.82 ? acc(nv * 5) : base(d))
@@ -236,7 +236,7 @@ function renderTile(spec: TexSpec): Uint8ClampedArray<ArrayBuffer> {
         }
 
         case 'wool': {
-          // Ruido "peludo": cuantizado a 2×2 para dar textura de fibra.
+          // "Fuzzy" noise, quantized to 2x2 for fiber texture.
           const qi = (y >> 1) * S + (x >> 1)
           put(x, y, base(n[qi] * 10 + nv * 4))
           break
@@ -253,7 +253,7 @@ function renderTile(spec: TexSpec): Uint8ClampedArray<ArrayBuffer> {
           if (border) {
             put(x, y, base(10, 200))
           } else {
-            // Reflejo diagonal.
+            // Diagonal reflection.
             const streak = Math.abs((x + y) % 22) < 3 ? 90 : 0
             put(x, y, base(6, 26 + streak))
           }
@@ -292,7 +292,7 @@ function renderTile(spec: TexSpec): Uint8ClampedArray<ArrayBuffer> {
   return out
 }
 
-/* ── construcción del atlas ─────────────────────────────────────────────── */
+/* ── building the atlas ─────────────────────────────────────────────────── */
 
 const slots = new Map<string, number>()
 const specs: TexSpec[] = []
@@ -308,12 +308,12 @@ for (const b of BLOCKS) {
 }
 
 if (specs.length > COLS * COLS) {
-  throw new Error(`Atlas desbordado: ${specs.length} tiles, capacidad ${COLS * COLS}`)
+  throw new Error(`Atlas overflow: ${specs.length} tiles, capacity ${COLS * COLS}`)
 }
 
 export const slotOf = (spec: TexSpec): number => slots.get(specKey(spec)) ?? 0
 
-/** Origen UV del slot. Asume texture.flipY = true (default de three). */
+/** Slot's UV origin. Assumes `texture.flipY = true` (three's default). */
 export function slotUV(slot: number): { u0: number; v0: number; size: number } {
   const col = slot % COLS
   const row = Math.floor(slot / COLS)
@@ -351,7 +351,7 @@ export function getAtlasTexture(): THREE.CanvasTexture {
   return tex
 }
 
-/** Miniatura de un bloque para la UI, como data URL. */
+/** Block thumbnail for the UI, as a data URL. */
 const thumbCache = new Map<string, string>()
 export function blockThumbnail(spec: TexSpec): string {
   const k = specKey(spec)

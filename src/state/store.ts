@@ -39,7 +39,7 @@ type Cell = { p: Vec3; id: BlockId | undefined }
 export type EditorState = {
   world: World
   meta: DesignMeta
-  /** Se incrementa en cada edición; lo consumen los paneles derivados. */
+  /** Increments on every edit; consumed by derived panels. */
   rev: number
 
   tool: Tool
@@ -61,7 +61,7 @@ export type EditorState = {
   canRedo: boolean
 
   view: 'edit' | 'guide'
-  /** Se incrementa para pedirle a la cámara que encuadre la construcción. */
+  /** Increments to ask the camera to fit the build. */
   fitRequest: number
   status: string | null
   busy: boolean
@@ -139,31 +139,31 @@ export const useEditor = create<EditorState>((set, get) => ({
   designs: [],
   storageMode: activeStore().mode,
 
-  /* ── modo y herramientas ─────────────────────────────────────────────── */
+  /* ── mode and tools ────────────────────────────────────────────────── */
 
   setTool: (t) => {
     const s = get()
-    // Regla: las herramientas de área siempre operan sobre un plano. Elegir una
-    // en modo 3D libre entra en modo capa en la altura que se esté mirando.
+    // Rule: area tools always act on a plane. Picking one in free 3D
+    // enters layer mode at the current height.
     if (AREA_TOOLS.includes(t) && s.sliceView === 'off') {
       const y = s.hover ? s.hover.y : s.sliceIndex
-      rec(EV.herramienta, str(s.tool), str(t), 1)
+      rec(EV.tool, str(s.tool), str(t), 1)
       set({ tool: t, sliceView: 'below', sliceIndex: y, anchor: null })
       return
     }
-    rec(EV.herramienta, str(s.tool), str(t), 0)
+    rec(EV.tool, str(s.tool), str(t), 0)
     set({ tool: t, anchor: null })
   },
 
   setBlock: (block) => {
-    rec(EV.bloque, str(get().block), str(block))
+    rec(EV.block, str(get().block), str(block))
     set({ block })
   },
 
   setSliceAxis: (a) => {
     const s = get()
     const max = sliceExtent(a, s.world.dims) - 1
-    rec(EV.ejeCapa, str(s.sliceAxis), str(a))
+    rec(EV.layerAxis, str(s.sliceAxis), str(a))
     set({ sliceAxis: a, sliceIndex: Math.min(s.sliceIndex, max), anchor: null, selection: null })
   },
 
@@ -171,12 +171,12 @@ export const useEditor = create<EditorState>((set, get) => ({
     const s = get()
     const max = sliceExtent(s.sliceAxis, s.world.dims) - 1
     const idx = Math.max(0, Math.min(max, i))
-    if (idx !== s.sliceIndex) rec(EV.capa, s.sliceIndex, idx, str(s.sliceAxis), idx !== i ? 1 : 0)
+    if (idx !== s.sliceIndex) rec(EV.layer, s.sliceIndex, idx, str(s.sliceAxis), idx !== i ? 1 : 0)
     set({ sliceIndex: idx, anchor: null })
   },
 
   setSliceView: (v) => {
-    rec(EV.modoCapa, str(get().sliceView), str(v))
+    rec(EV.layerMode, str(get().sliceView), str(v))
     set({ sliceView: v, anchor: null, selection: v === 'off' ? null : get().selection })
   },
   setHover: (hover) => set({ hover }),
@@ -185,25 +185,25 @@ export const useEditor = create<EditorState>((set, get) => ({
     set({ [k]: !get()[k] } as Partial<EditorState>)
   },
   setView: (view) => {
-    rec(EV.vista, str(get().view), str(view))
+    rec(EV.view, str(get().view), str(view))
     set({ view })
   },
   setStatus: (status) => {
-    if (status) rec(EV.estado, str(status.slice(0, 80)))
+    if (status) rec(EV.status, str(status.slice(0, 80)))
     set({ status })
   },
   requestFit: () => {
-    rec(EV.camaraEncuadre, NaN, NaN, get().world.size)
+    rec(EV.cameraFit, NaN, NaN, get().world.size)
     set((s) => ({ fitRequest: s.fitRequest + 1 }))
   },
 
-  /* ── edición ─────────────────────────────────────────────────────────── */
+  /* ── editing ───────────────────────────────────────────────────────── */
 
   beginStroke: () => {
-    // Si ya estábamos en un trazo, el `pointerup` anterior se perdió: los
-    // deltas acumulados se irían sin entrar al historial. Queda registrado.
+    // If already mid-stroke, the prior pointerup was missed; its deltas
+    // would vanish unrecorded. Logged instead.
     if (stroking) {
-      rec(EV.trazoHuerfano, strokeDeltas.length)
+      rec(EV.strokeOrphaned, strokeDeltas.length)
       if (strokeDeltas.length) {
         history.push(strokeDeltas)
         set({ canUndo: history.canUndo, canRedo: history.canRedo })
@@ -211,13 +211,13 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     stroking = true
     strokeDeltas = []
-    rec(EV.trazoInicio, str(get().tool))
+    rec(EV.strokeStart, str(get().tool))
   },
 
   endStroke: () => {
     stroking = false
     if (strokeDeltas.length) history.push(strokeDeltas)
-    rec(EV.trazoFin, strokeDeltas.length)
+    rec(EV.strokeEnd, strokeDeltas.length)
     strokeDeltas = []
     set({ canUndo: history.canUndo, canRedo: history.canRedo })
   },
@@ -235,12 +235,12 @@ export const useEditor = create<EditorState>((set, get) => ({
     }
     world.endBatch()
     if (deltas.length === 0) {
-      rec(EV.sinCambio, cells.length, str('sin-delta'))
+      rec(EV.noChange, cells.length, str('no-delta'))
       return
     }
-    if (mirrorX || mirrorZ) rec(EV.espejo, cells.length, deltas.length)
+    if (mirrorX || mirrorZ) rec(EV.mirror, cells.length, deltas.length)
     rec(
-      EV.escritura,
+      EV.write,
       cells.length, deltas.length, world.size, stroking ? 1 : 0,
       performance.now() - t0,
     )
@@ -256,16 +256,16 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   pickAt: (p) => {
     const id = get().world.get(p.x, p.y, p.z)
-    rec(EV.pintar, p.x, p.y, p.z, id ? str(id) : str('vacio'), NaN)
+    rec(EV.paint, p.x, p.y, p.z, id ? str(id) : str('empty'), NaN)
     if (id) set({ block: id, tool: 'brush' })
-    else rec(EV.sinCambio, 1, str('cuentagotas-en-vacio'))
+    else rec(EV.noChange, 1, str('eyedropper-on-empty'))
   },
 
-  /** Click dentro del slice activo. Resuelve la herramienta en curso. */
+  /** Click inside the active slice; dispatches to the current tool. */
   planeAction: (uv, erase) => {
     const s = get()
     rec(
-      EV.accionPlano,
+      EV.planeClick,
       str(s.tool), uv.u, uv.v, erase ? 1 : 0, s.sliceIndex, str(s.sliceAxis),
     )
     const slice = { axis: s.sliceAxis, index: s.sliceIndex }
@@ -311,7 +311,7 @@ export const useEditor = create<EditorState>((set, get) => ({
         else {
           const a = planeToWorld(slice, Math.min(s.anchor.u, uv.u), Math.min(s.anchor.v, uv.v))
           const b = planeToWorld(slice, Math.max(s.anchor.u, uv.u), Math.max(s.anchor.v, uv.v))
-          rec(EV.seleccion, Math.abs(b.x - a.x) + 1, Math.abs(b.z - a.z) + 1, NaN)
+          rec(EV.selection, Math.abs(b.x - a.x) + 1, Math.abs(b.z - a.z) + 1, NaN)
           set({
             anchor: null,
             selection: {
@@ -328,7 +328,7 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   undo: () => {
     const ok = history.undo(get().world)
-    rec(EV.deshacer, ok ? 1 : 0, get().world.size)
+    rec(EV.undo, ok ? 1 : 0, get().world.size)
     if (ok) {
       set((s) => ({ rev: s.rev + 1, canUndo: history.canUndo, canRedo: history.canRedo }))
     }
@@ -336,13 +336,13 @@ export const useEditor = create<EditorState>((set, get) => ({
 
   redo: () => {
     const ok = history.redo(get().world)
-    rec(EV.rehacer, ok ? 1 : 0, get().world.size)
+    rec(EV.redo, ok ? 1 : 0, get().world.size)
     if (ok) {
       set((s) => ({ rev: s.rev + 1, canUndo: history.canUndo, canRedo: history.canRedo }))
     }
   },
 
-  /* ── portapapeles ────────────────────────────────────────────────────── */
+  /* ── clipboard ─────────────────────────────────────────────────────── */
 
   copySelection: (cut) => {
     const s = get()
@@ -364,7 +364,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       }
     }
     set({ clipboard: { w: b.u - a.u + 1, h: b.v - a.v + 1, cells } })
-    rec(EV.copiar, cells.length, cut ? 1 : 0)
+    rec(EV.copy, cells.length, cut ? 1 : 0)
     if (cut && toRemove.length) s.applyCells(toRemove)
     s.setStatus(`${cells.length} bloques ${cut ? 'cortados' : 'copiados'}`)
   },
@@ -372,10 +372,10 @@ export const useEditor = create<EditorState>((set, get) => ({
   pasteAt: (uv) => {
     const s = get()
     if (!s.clipboard) {
-      rec(EV.fallo, str('pegar-sin-portapapeles'))
+      rec(EV.failure, str('paste-no-clipboard'))
       return
     }
-    rec(EV.pegar, uv.u, uv.v, s.clipboard.cells.length)
+    rec(EV.paste, uv.u, uv.v, s.clipboard.cells.length)
     const slice = { axis: s.sliceAxis, index: s.sliceIndex }
     s.applyCells(
       s.clipboard.cells.map((c) => ({
@@ -390,7 +390,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   deleteSelection: () => {
     const s = get()
     if (!s.selection) {
-      rec(EV.fallo, str('borrar-sin-seleccion'))
+      rec(EV.failure, str('delete-no-selection'))
       return
     }
     const cells: Cell[] = []
@@ -401,7 +401,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     s.applyCells(cells)
   },
 
-  /* ── documento ───────────────────────────────────────────────────────── */
+  /* ── document ──────────────────────────────────────────────────────── */
 
   newDesign: (dims = DEFAULT_DIMS, name) => {
     const d: Dims = {
@@ -409,9 +409,9 @@ export const useEditor = create<EditorState>((set, get) => ({
       y: Math.max(1, Math.min(MAX_AXIS, dims.y)),
       z: Math.max(1, Math.min(MAX_AXIS, dims.z)),
     }
-    history.clear('diseno-nuevo')
+    history.clear('new-design')
     const world = new World(d)
-    rec(EV.disenoNuevo, d.x, d.y, d.z)
+    rec(EV.designNew, d.x, d.y, d.z)
     set({
       world,
       meta: newMeta(d, name),
@@ -437,10 +437,10 @@ export const useEditor = create<EditorState>((set, get) => ({
       z: Math.max(1, Math.min(MAX_AXIS, dims.z)),
     }
     const s = get()
-    const antes = s.world.size
+    const before = s.world.size
     s.world.resize(d)
-    rec(EV.disenoRedimensionado, d.x, d.y, d.z, antes - s.world.size)
-    history.clear('redimensionar')
+    rec(EV.designResized, d.x, d.y, d.z, before - s.world.size)
+    history.clear('resize')
     set({
       meta: { ...s.meta, dims: d },
       rev: s.rev + 1,
@@ -461,7 +461,7 @@ export const useEditor = create<EditorState>((set, get) => ({
     s.applyCells(cells)
   },
 
-  /* ── persistencia ────────────────────────────────────────────────────── */
+  /* ── persistence ───────────────────────────────────────────────────── */
 
   syncStorageMode: () => set({ storageMode: activeStore().mode }),
 
@@ -470,7 +470,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       const designs = await activeStore().list()
       set({ designs, storageMode: activeStore().mode })
     } catch (e) {
-      recObj(EV.fallo, { donde: 'refreshDesigns', mensaje: (e as Error).message })
+      recObj(EV.failure, { where: 'refreshDesigns', message: (e as Error).message })
       set({ status: `No se pudo listar: ${(e as Error).message}` })
     }
   },
@@ -484,11 +484,11 @@ export const useEditor = create<EditorState>((set, get) => ({
       const t0 = performance.now()
       const sd = serializeDesign(s.meta, s.world)
       await activeStore().save(sd)
-      rec(EV.disenoGuardado, sd.blockCount, sd.data.length, performance.now() - t0)
+      rec(EV.designSaved, sd.blockCount, sd.data.length, performance.now() - t0)
       set({ meta: { ...s.meta, updatedAt: sd.updatedAt }, status: `Guardado: ${sd.name}` })
       await get().refreshDesigns()
     } catch (e) {
-      recObj(EV.fallo, { donde: 'saveCurrent', mensaje: (e as Error).message })
+      recObj(EV.failure, { where: 'saveCurrent', message: (e as Error).message })
       set({ status: `Error al guardar: ${(e as Error).message}` })
     } finally {
       set({ busy: false })
@@ -503,7 +503,7 @@ export const useEditor = create<EditorState>((set, get) => ({
       get().loadStored(sd)
       set({ status: `Abierto: ${sd.name}` })
     } catch (e) {
-      recObj(EV.fallo, { donde: 'openDesign', mensaje: (e as Error).message })
+      recObj(EV.failure, { where: 'openDesign', message: (e as Error).message })
       set({ status: `Error al abrir: ${(e as Error).message}` })
     } finally {
       set({ busy: false })
@@ -513,11 +513,11 @@ export const useEditor = create<EditorState>((set, get) => ({
   deleteDesign: async (id) => {
     try {
       await activeStore().remove(id)
-      rec(EV.disenoBorrado)
+      rec(EV.designDeleted)
       await get().refreshDesigns()
       set({ status: 'Diseño borrado' })
     } catch (e) {
-      recObj(EV.fallo, { donde: 'deleteDesign', mensaje: (e as Error).message })
+      recObj(EV.failure, { where: 'deleteDesign', message: (e as Error).message })
       set({ status: `Error al borrar: ${(e as Error).message}` })
     }
   },
@@ -528,18 +528,18 @@ export const useEditor = create<EditorState>((set, get) => ({
     try {
       ;({ meta, entries } = deserializeDesign(sd))
     } catch (e) {
-      recObj(EV.fallo, { donde: 'loadStored/deserialize', id: sd.id, mensaje: (e as Error).message })
+      recObj(EV.failure, { where: 'loadStored/deserialize', id: sd.id, message: (e as Error).message })
       set({ status: `Diseño ilegible: ${(e as Error).message}` })
       return
     }
     const world = new World(meta.dims)
     world.replaceAll(entries, meta.dims)
     rec(
-      EV.disenoCargado,
+      EV.designLoaded,
       sd.blockCount, meta.dims.x, meta.dims.y, meta.dims.z,
       performance.now() - t0,
     )
-    history.clear('abrir-diseno')
+    history.clear('open-design')
     set({
       world,
       meta,
@@ -555,33 +555,33 @@ export const useEditor = create<EditorState>((set, get) => ({
   },
 }))
 
-/* ── telemetría: lector de estado para los snapshots ─────────────────────── */
+/* ── telemetry: state reader for snapshots ────────────────────────────────── */
 
 registerSnapshotSource(() => {
   const s = useEditor.getState()
   return {
-    herramienta: s.tool,
-    bloque: s.block,
-    modoCapa: s.sliceView,
-    eje: s.sliceAxis,
-    capa: s.sliceIndex,
-    espejoX: s.mirrorX,
-    espejoZ: s.mirrorZ,
-    rectRelleno: s.rectFilled,
-    grilla: s.showGrid,
-    vista: s.view,
-    bloques: s.world.size,
+    tool: s.tool,
+    block: s.block,
+    layerMode: s.sliceView,
+    axis: s.sliceAxis,
+    layer: s.sliceIndex,
+    mirrorX: s.mirrorX,
+    mirrorZ: s.mirrorZ,
+    rectFilled: s.rectFilled,
+    showGrid: s.showGrid,
+    view: s.view,
+    blocks: s.world.size,
     chunks: s.world.nonEmptyChunks().length,
     dims: s.world.dims,
-    limites: s.world.bounds(),
-    haySeleccion: Boolean(s.selection),
-    hayPortapapeles: Boolean(s.clipboard),
+    bounds: s.world.bounds(),
+    hasSelection: Boolean(s.selection),
+    hasClipboard: Boolean(s.clipboard),
     hover: s.hover,
-    anclaje: s.anchor,
-    puedeDeshacer: s.canUndo,
-    puedeRehacer: s.canRedo,
+    anchor: s.anchor,
+    canUndo: s.canUndo,
+    canRedo: s.canRedo,
     rev: s.rev,
-    almacenamiento: s.storageMode,
-    disenos: s.designs.length,
+    storageMode: s.storageMode,
+    designCount: s.designs.length,
   }
 })

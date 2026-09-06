@@ -5,9 +5,8 @@ type Props = { children: ReactNode }
 type State = { error: Error | null; info: string }
 
 /**
- * Sin esto, cualquier excepción durante el render deja la pantalla en negro y
- * sin pista de qué pasó — especialmente al embeber la app en un iframe, donde
- * la consola del host no ve los errores de adentro.
+ * Without this, a render exception blanks the screen silently — especially
+ * bad when embedded in an iframe.
  */
 export class ErrorBoundary extends Component<Props, State> {
   state: State = { error: null, info: '' }
@@ -18,13 +17,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     this.setState({ info: info.componentStack ?? '' })
-    // Sin esto, el único registro que el usuario puede exportar era justamente
-    // el que no contenía el crash.
-    recObj(EV.excepcion, {
-      donde: 'ErrorBoundary',
-      mensaje: error.message,
+    // Without this, the only log a user could export was exactly the one
+    // missing the crash.
+    recObj(EV.exception, {
+      where: 'ErrorBoundary',
+      message: error.message,
       stack: error.stack?.slice(0, 1200),
-      componentes: info.componentStack?.slice(0, 1200),
+      componentStack: info.componentStack?.slice(0, 1200),
     })
     console.error('[MC Blueprint]', error, info)
   }
@@ -46,7 +45,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-/** ¿Hay WebGL utilizable? El editor 3D no tiene sentido sin esto. */
+/** Is WebGL usable? The 3D editor is meaningless without it. */
 export function hasWebGL(): boolean {
   try {
     const c = document.createElement('canvas')

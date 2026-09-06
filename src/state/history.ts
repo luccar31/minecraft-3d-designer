@@ -4,7 +4,7 @@ import type { World } from '../voxel/world'
 
 const DEPTH = 100
 
-/** Pila de comandos con deltas de celdas. Un trazo completo entra como una entrada. */
+/** Command stack of cell deltas; a full stroke is pushed as one entry. */
 export class History {
   private past: CellDelta[][] = []
   private future: CellDelta[][] = []
@@ -14,14 +14,14 @@ export class History {
 
   push(deltas: CellDelta[]) {
     if (deltas.length === 0) return
-    const futuroPerdido = this.future.length
+    const futureLost = this.future.length
     this.past.push(deltas)
-    // Pasado el tope, la entrada más vieja deja de poder deshacerse. Antes esto
-    // ocurría en silencio y el usuario sólo notaba que el undo "no llegaba".
-    const podado = this.past.length > DEPTH
-    if (podado) this.past.shift()
+    // Past the cap, the oldest entry can't be undone; this used to fail
+    // silently, confusing users.
+    const pruned = this.past.length > DEPTH
+    if (pruned) this.past.shift()
     this.future.length = 0
-    if (podado || futuroPerdido) rec(EV.historialPodado, podado ? DEPTH : NaN, futuroPerdido)
+    if (pruned || futureLost) rec(EV.historyPruned, pruned ? DEPTH : NaN, futureLost)
   }
 
   get depth() { return this.past.length }
@@ -42,9 +42,9 @@ export class History {
     return true
   }
 
-  clear(motivo = 'sin-motivo') {
+  clear(reason = 'no-reason') {
     if (this.past.length || this.future.length) {
-      rec(EV.historialLimpiado, this.past.length, this.future.length, str(motivo))
+      rec(EV.historyCleared, this.past.length, this.future.length, str(reason))
     }
     this.past.length = 0
     this.future.length = 0

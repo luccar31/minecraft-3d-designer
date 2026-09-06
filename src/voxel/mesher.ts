@@ -15,9 +15,8 @@ type FaceSpec = {
 }
 
 /**
- * Las 6 caras del cubo unidad, en orden antihorario visto desde afuera.
- * Los factores de sombreado replican la lectura de volumen del juego: sin
- * ellos un cubo blanco se ve como una silueta plana.
+ * The 6 unit-cube faces, counterclockwise from outside. Shading mimics the
+ * game; without it a white cube looks flat.
  */
 const FACES: FaceSpec[] = [
   {
@@ -65,9 +64,8 @@ const FACES: FaceSpec[] = [
 ]
 
 /**
- * Desplazamientos para la oclusión ambiental de cada vértice: los dos vecinos
- * laterales y el de la esquina, en el plano inmediatamente por fuera de la cara.
- * Se derivan de la normal y de en qué esquina del cubo cae el vértice.
+ * Per-vertex AO offsets: the two side neighbors plus the corner, just
+ * outside the face plane.
  */
 const AO_OFFSETS: [number, number, number][][][] = FACES.map((face) => {
   const [nx, ny, nz] = face.dir
@@ -89,7 +87,7 @@ const AO_OFFSETS: [number, number, number][][][] = FACES.map((face) => {
 })
 
 const AO_LEVELS = [0.55, 0.72, 0.86, 1.0]
-const UV_INSET = 0.5 / (32 * 16) // medio téxel del atlas
+const UV_INSET = 0.5 / (32 * 16) // half a texel of the atlas
 
 export type ChunkGeometry = {
   opaque: THREE.BufferGeometry | null
@@ -119,11 +117,10 @@ function toGeometry(b: Buffers): THREE.BufferGeometry | null {
   return g
 }
 
-/** ¿La cara del bloque `self` hacia `neighbour` debe dibujarse? */
 function faceVisible(self: string, neighbour: string | undefined): boolean {
   if (neighbour === undefined) return true
   if (!isTransparent(neighbour)) return false
-  // Vidrio contra vidrio del mismo tipo: se funden en una sola cáscara.
+  // Same-type glass touching glass merges into a single shell.
   return !isTransparent(self) || self !== neighbour
 }
 
@@ -187,8 +184,8 @@ export function buildChunkGeometry(world: World, ck: ChunkKey): ChunkGeometry {
         target.col.push(light, light, light)
       }
 
-      // Si la diagonal por defecto cruza el gradiente de AO al revés,
-      // se ve un pliegue diagonal. Se voltea la triangulación.
+      // If the default diagonal crosses the AO gradient backwards it shows
+      // a fold; flip the triangulation.
       if (ao[0] + ao[2] > ao[1] + ao[3]) {
         target.idx.push(base, base + 1, base + 2, base, base + 2, base + 3)
       } else {
@@ -198,8 +195,8 @@ export function buildChunkGeometry(world: World, ck: ChunkKey): ChunkGeometry {
     }
   }
 
-  // Reconstruir un chunk es la operación que decide si colocar un bloque se
-  // siente instantáneo: se mide siempre, no sólo cuando algo va mal.
+  // Rebuilding a chunk decides if placing a block feels instant; always
+  // measured, not just on failure.
   rec(EV.remesh, ck, cells.size, performance.now() - t0, opaque.n, trans.n)
 
   return { opaque: toGeometry(opaque), transparent: toGeometry(trans) }

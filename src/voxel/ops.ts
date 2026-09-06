@@ -4,9 +4,8 @@ import type { Axis, BlockId, Dims, Slice, Vec3 } from '../types'
 export type UV = { u: number; v: number }
 
 /**
- * Un slice es un plano perpendicular a un eje. `u` y `v` son sus coordenadas
- * locales; el mapeo se elige para que `v` sea siempre "hacia arriba en pantalla"
- * en los cortes verticales, que es lo que espera la mano al dibujar una pared.
+ * `v` always points "up on screen" in vertical slices — matches how you'd
+ * draw a wall by hand.
  */
 export function planeDims(axis: Axis, dims: Dims): { u: number; v: number } {
   switch (axis) {
@@ -40,9 +39,9 @@ export function sliceExtent(axis: Axis, dims: Dims): number {
   return axis === 'x' ? dims.x : axis === 'y' ? dims.y : dims.z
 }
 
-/* ── trazado en el plano ────────────────────────────────────────────────── */
+/* ── drawing on the plane ──────────────────────────────────────────────── */
 
-/** Bresenham entero. */
+/** Integer Bresenham line. */
 export function linePoints(u0: number, v0: number, u1: number, v1: number): UV[] {
   const out: UV[] = []
   let x = u0, y = v0
@@ -51,12 +50,12 @@ export function linePoints(u0: number, v0: number, u1: number, v1: number): UV[]
   const sx = u0 < u1 ? 1 : -1
   const sy = v0 < v1 ? 1 : -1
   let err = dx + dy
-  // Cota dura: sin ella, un NaN en cualquier extremo hace que este bucle no
-  // termine nunca y cuelgue la pestaña sin dejar ni un evento.
-  const tope = dx + Math.abs(dy) + 2
+  // Hard cap: without it, a NaN endpoint loops forever and hangs the tab
+  // with no event logged.
+  const cap = dx + Math.abs(dy) + 2
   for (let i = 0; ; i++) {
-    if (i > tope) {
-      rec(EV.limiteAlcanzado, str('linePoints'), tope)
+    if (i > cap) {
+      rec(EV.limitReached, str('linePoints'), cap)
       break
     }
     out.push({ u: x, v: y })
@@ -72,8 +71,8 @@ export function rectPoints(u0: number, v0: number, u1: number, v1: number, fille
   const uMin = Math.min(u0, u1), uMax = Math.max(u0, u1)
   const vMin = Math.min(v0, v1), vMax = Math.max(v0, v1)
   const out: UV[] = []
-  const celdas = (uMax - uMin + 1) * (vMax - vMin + 1)
-  if (celdas > 65536) rec(EV.limiteAlcanzado, str('rectPoints'), celdas)
+  const cells = (uMax - uMin + 1) * (vMax - vMin + 1)
+  if (cells > 65536) rec(EV.limitReached, str('rectPoints'), cells)
   for (let u = uMin; u <= uMax; u++) {
     for (let v = vMin; v <= vMax; v++) {
       const edge = u === uMin || u === uMax || v === vMin || v === vMax
@@ -83,7 +82,7 @@ export function rectPoints(u0: number, v0: number, u1: number, v1: number, fille
   return out
 }
 
-/** Relleno 4-conexo dentro del slice, limitado para no colgar el hilo. */
+/** 4-connected fill within the slice, capped so it can't hang the thread. */
 export function floodFill(
   at: (u: number, v: number) => BlockId | undefined,
   start: UV,
@@ -107,15 +106,15 @@ export function floodFill(
     out.push(p)
     stack.push({ u: p.u + 1, v: p.v }, { u: p.u - 1, v: p.v }, { u: p.u, v: p.v + 1 }, { u: p.u, v: p.v - 1 })
   }
-  // Topearse deja el relleno incompleto: el usuario ve un resultado a medias y
-  // hasta ahora no había forma de saber que se había topeado.
-  if (out.length >= limit) rec(EV.limiteAlcanzado, str('floodFill'), limit)
+  // Hitting the cap leaves the fill incomplete; previously there was no way
+  // to know it happened.
+  if (out.length >= limit) rec(EV.limitReached, str('floodFill'), limit)
   return out
 }
 
-/* ── simetría ───────────────────────────────────────────────────────────── */
+/* ── symmetry ──────────────────────────────────────────────────────────── */
 
-/** Celdas destino de una escritura con los espejos activos (1, 2 o 4). */
+/** Target cells for a write with active mirrors (1, 2, or 4). */
 export function mirrorTargets(p: Vec3, dims: Dims, mx: boolean, mz: boolean): Vec3[] {
   const xs = mx ? [p.x, dims.x - 1 - p.x] : [p.x]
   const zs = mz ? [p.z, dims.z - 1 - p.z] : [p.z]

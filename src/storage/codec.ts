@@ -3,7 +3,7 @@ import pako from 'pako'
 import type { BlockId, DesignMeta, StoredDesign, VoxelKey } from '../types'
 import type { World } from '../voxel/world'
 
-/* base64 sobre binario, por trozos para no reventar la pila con arrays grandes */
+/* Base64 over binary, chunked so large arrays don't blow the call stack. */
 
 function toBase64(bytes: Uint8Array): string {
   let s = ''
@@ -22,9 +22,8 @@ function fromBase64(b64: string): Uint8Array {
 }
 
 /**
- * Cada celda son 6 bytes: uint32 con la clave empaquetada + uint16 con el
- * índice en la paleta. Gzip encima: las claves salen casi ordenadas y la
- * paleta es chica, así que comprime muy bien (100k bloques ≈ 40 KB).
+ * Each cell: 6 bytes — packed key (uint32) + palette index (uint16). Gzip
+ * compresses well (100k blocks ≈ 40 KB).
  */
 export function serializeDesign(meta: DesignMeta, world: World): StoredDesign {
   const __t0 = performance.now()
@@ -50,7 +49,7 @@ export function serializeDesign(meta: DesignMeta, world: World): StoredDesign {
 
   const data = toBase64(pako.gzip(new Uint8Array(buf)))
   rec(
-    EV.codec, str('serializar'), performance.now() - __t0,
+    EV.codec, str('serialize'), performance.now() - __t0,
     buf.byteLength, data.length, keys.length,
   )
 
@@ -76,19 +75,19 @@ export function deserializeDesign(sd: StoredDesign): {
   const raw = pako.ungzip(fromBase64(sd.data))
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength)
   const entries: [VoxelKey, BlockId][] = []
-  let sinPaleta = 0
+  let unmapped = 0
   for (let off = 0; off + 6 <= raw.byteLength; off += 6) {
     const key = view.getUint32(off, true)
     const pi = view.getUint16(off + 4, true)
     const id = sd.palette[pi]
-    // Una celda cuyo índice de paleta no existe desaparecía muda: bloques que
-    // se esfuman al abrir un diseño, sin nada que consultar.
+    // A cell whose palette index doesn't exist used to vanish silently —
+    // blocks gone with nothing to check.
     if (id) entries.push([key, id])
-    else sinPaleta++
+    else unmapped++
   }
   const total = Math.floor(raw.byteLength / 6)
-  if (sinPaleta) rec(EV.descartado, str('deserializar/paleta'), sinPaleta, total)
-  rec(EV.codec, str('deserializar'), performance.now() - t0, raw.byteLength, sd.data.length, entries.length)
+  if (unmapped) rec(EV.discarded, str('deserialize/palette'), unmapped, total)
+  rec(EV.codec, str('deserialize'), performance.now() - t0, raw.byteLength, sd.data.length, entries.length)
   return {
     meta: {
       id: sd.id,
