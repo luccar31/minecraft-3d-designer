@@ -1,13 +1,17 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Scene } from './scene/Scene'
 import { PalettePanel } from './ui/PalettePanel'
 import { ToolPanel } from './ui/ToolPanel'
 import { TopBar } from './ui/TopBar'
 import { DesignsPanel } from './ui/DesignsPanel'
 import { DebugPanel } from './ui/DebugPanel'
+import { ModeIndicator } from './ui/ModeIndicator'
+import { CoordReadout } from './ui/CoordReadout'
 import { useEditor } from './state/store'
 import { hasWebGL } from './ui/ErrorBoundary'
 import { worldToPlane } from './voxel/ops'
+import { spaceDown, spaceUp, type SpaceState } from './scene/modeKeys'
+import { consumeCameraMoved } from './scene/cameraActivity'
 import { EV, packMods, rec, str, touchClock } from './debug'
 import type { Tool } from './types'
 
@@ -32,6 +36,8 @@ export default function App() {
   const rev = useEditor((s) => s.rev)
   const world = useEditor((s) => s.world)
   const showGrid = useEditor((s) => s.showGrid)
+  const mode = useEditor((s) => s.mode)
+  const spaceRef = useRef<SpaceState | null>(null)
 
   useEffect(() => {
     useEditor.getState().refreshDesigns()
@@ -92,6 +98,15 @@ export default function App() {
         if (s.sliceView !== 'off') { e.preventDefault(); s.setSliceIndex(s.sliceIndex - 1) }
         return
       }
+      // Space resolves on release: a tap toggles, holding it is transient.
+      if (e.code === 'Space' && !e.repeat) {
+        e.preventDefault()
+        consumeCameraMoved()
+        const r = spaceDown(s.mode, performance.now())
+        spaceRef.current = r.state
+        s.setMode(r.mode)
+        return
+      }
       if (mod) return
 
       const k = e.key.toLowerCase()
@@ -104,8 +119,18 @@ export default function App() {
       if (k === '2') s.setSliceView('below')
       if (k === '3') s.setSliceView('isolate')
     }
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || !spaceRef.current) return
+      const r = spaceUp(spaceRef.current, performance.now(), consumeCameraMoved())
+      spaceRef.current = null
+      useEditor.getState().setMode(r.mode)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKeyUp)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKeyUp)
+    }
   }, [])
 
   const blockCount = (() => {
@@ -120,7 +145,7 @@ export default function App() {
       {view === 'edit' ? (
         <div className="main">
           <PalettePanel />
-          <div className="viewport">
+          <div className={`viewport ${mode}`}>
             {WEBGL ? (
               <Scene />
             ) : (
@@ -133,7 +158,9 @@ export default function App() {
                 <button onClick={() => useEditor.getState().setView('guide')}>Ver la guía</button>
               </div>
             )}
+            <CoordReadout />
             <div className="view-tools">
+              <ModeIndicator />
               <button onClick={() => useEditor.getState().requestFit()} title="Encuadrar la construcción (C)">
                 Centrar
               </button>
@@ -173,6 +200,7 @@ export default function App() {
           <span className="kbd">shift+click</span> borrar ·{' '}
           <span className="kbd">alt+click</span> cuentagotas ·{' '}
           <span className="kbd">arrastrar</span> pintar ·{' '}
+          <span className="kbd">espacio</span> construir/navegar ·{' '}
           <span className="kbd">rueda</span> zoom
         </span>
         {status && <span className="msg">{status}</span>}
