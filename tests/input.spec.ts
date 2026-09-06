@@ -350,3 +350,34 @@ test('en navigate, el registro no contiene ninguna escritura durante el gesto', 
   })
   expect(writes).toBe(0)
 })
+
+test('el picking sobrevive a entrar y salir del modo capa', async ({ page }) => {
+  await ready(page)
+  await platform(page)
+
+  // raycast={undefined} escribía una propiedad propia que tapaba
+  // Mesh.prototype.raycast, y sólo al volver de modo capa el prop cambiaba.
+  await page.evaluate(async () => {
+    const s = () => window.__mcb.store.getState()
+    s().setSliceView('isolate')
+    s().setSliceIndex(3)
+    await new Promise((r) => setTimeout(r, 300))
+    s().setSliceView('off')
+    await new Promise((r) => setTimeout(r, 400))
+    window.__mcb.tel.clear()
+  })
+
+  const before = await page.evaluate(() => window.__mcb.store.getState().world.size)
+  const box = (await page.locator('canvas').boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await page.waitForTimeout(300)
+
+  const after = await page.evaluate(() => window.__mcb.store.getState().world.size)
+  const errors = await page.evaluate(() => {
+    const events = JSON.parse(window.__mcb.tel.toJSON()).events as { cat: string }[]
+    return events.filter((e) => e.cat === 'error').length
+  })
+
+  expect(errors, 'el raycast no debe lanzar').toBe(0)
+  expect(after).toBe(before + 1)
+})
