@@ -1,0 +1,794 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index df1466a..8e9f070 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -7,6 +7,7 @@ import { DesignsPanel } from './ui/DesignsPanel'
+ import { DebugPanel } from './ui/DebugPanel'
+ import { useEditor } from './state/store'
+ import { hasWebGL } from './ui/ErrorBoundary'
++import { Tip } from './ui/Tip'
+ import { worldToPlane } from './voxel/ops'
+ import { EV, packMods, rec, str, touchClock } from './debug'
+ import type { Tool } from './types'
+@@ -134,16 +135,17 @@ export default function App() {
+               </div>
+             )}
+             <div className="view-tools">
+-              <button onClick={() => useEditor.getState().requestFit()} title="Encuadrar la construcción (C)">
+-                Centrar
+-              </button>
+-              <button
+-                className={showGrid ? 'on' : ''}
+-                onClick={() => useEditor.getState().toggle('showGrid')}
+-                title="Mostrar u ocultar la grilla (G)"
+-              >
+-                Grilla
+-              </button>
++              <Tip id="view.fit">
++                <button onClick={() => useEditor.getState().requestFit()}>Centrar</button>
++              </Tip>
++              <Tip id="view.grid">
++                <button
++                  className={showGrid ? 'on' : ''}
++                  onClick={() => useEditor.getState().toggle('showGrid')}
++                >
++                  Grilla
++                </button>
++              </Tip>
+             </div>
+           </div>
+           <ToolPanel />
+diff --git a/src/ui/AuthPanel.tsx b/src/ui/AuthPanel.tsx
+index 0b07a3e..abd6070 100644
+--- a/src/ui/AuthPanel.tsx
++++ b/src/ui/AuthPanel.tsx
+@@ -1,6 +1,7 @@
+ import { useEffect, useState } from 'react'
+ import { getSupabase, setSignedIn, supabaseConfigured } from '../storage'
+ import { useEditor } from '../state/store'
++import { Tip } from './Tip'
+ 
+ /**
+  * Magic-link login: lets a design saved on your computer show up on your
+@@ -50,17 +51,19 @@ export function AuthPanel() {
+         <h3>Nube</h3>
+         <div className="row">
+           <span className="label">Sesión: <b>{user}</b></span>
+-          <button
+-            className="ghost"
+-            onClick={async () => {
+-              await getSupabase()?.auth.signOut()
+-              setSignedIn(false)
+-              sync()
+-              refresh()
+-            }}
+-          >
+-            Salir
+-          </button>
++          <Tip id="auth.signOut">
++            <button
++              className="ghost"
++              onClick={async () => {
++                await getSupabase()?.auth.signOut()
++                setSignedIn(false)
++                sync()
++                refresh()
++              }}
++            >
++              Salir
++            </button>
++          </Tip>
+         </div>
+       </div>
+     )
+@@ -73,13 +76,16 @@ export function AuthPanel() {
+         <p className="hint">Te mandamos un link a <b>{email}</b>. Abrilo para iniciar sesión.</p>
+       ) : (
+         <div className="row">
+-          <input
+-            type="email"
+-            placeholder="tu@email.com"
+-            value={email}
+-            onChange={(e) => setEmail(e.target.value)}
+-            aria-label="Email"
+-          />
++          <Tip id="auth.email">
++            <input
++              type="email"
++              placeholder="tu@email.com"
++              value={email}
++              onChange={(e) => setEmail(e.target.value)}
++              aria-label="Email"
++            />
++          </Tip>
++          <Tip id="auth.send">
+           <button
+             onClick={async () => {
+               setErr(null)
+@@ -96,6 +102,7 @@ export function AuthPanel() {
+           >
+             Enviar link
+           </button>
++          </Tip>
+         </div>
+       )}
+       {err && <p className="err">{err}</p>}
+diff --git a/src/ui/DesignsPanel.tsx b/src/ui/DesignsPanel.tsx
+index d4caca9..74582e2 100644
+--- a/src/ui/DesignsPanel.tsx
++++ b/src/ui/DesignsPanel.tsx
+@@ -1,6 +1,7 @@
+ import { useEffect, useState } from 'react'
+ import { useEditor } from '../state/store'
+ import { AuthPanel } from './AuthPanel'
++import { Tip } from './Tip'
+ import { MAX_AXIS } from '../types'
+ 
+ export function DesignsPanel({ onClose }: { onClose: () => void }) {
+@@ -32,45 +33,56 @@ export function DesignsPanel({ onClose }: { onClose: () => void }) {
+         <div className="section">
+           <h3>Nuevo diseño</h3>
+           <div className="row" style={{ marginBottom: 8 }}>
+-            <input
+-              type="text"
+-              value={newName}
+-              onChange={(e) => setNewName(e.target.value)}
+-              placeholder="Nombre"
+-              aria-label="Nombre del diseño nuevo"
+-            />
++            <Tip id="designs.name">
++              <input
++                type="text"
++                value={newName}
++                onChange={(e) => setNewName(e.target.value)}
++                placeholder="Nombre"
++                aria-label="Nombre del diseño nuevo"
++              />
++            </Tip>
+           </div>
+           <div className="grid3" style={{ marginBottom: 8 }}>
+             <label className="label">
+               Ancho (X)
+-              <input type="number" min={1} max={MAX_AXIS} value={dx} onChange={(e) => setDx(Number(e.target.value))} />
++              <Tip id="designs.dimX">
++                <input type="number" min={1} max={MAX_AXIS} value={dx} onChange={(e) => setDx(Number(e.target.value))} />
++              </Tip>
+             </label>
+             <label className="label">
+               Alto (Y)
+-              <input type="number" min={1} max={MAX_AXIS} value={dy} onChange={(e) => setDy(Number(e.target.value))} />
++              <Tip id="designs.dimY">
++                <input type="number" min={1} max={MAX_AXIS} value={dy} onChange={(e) => setDy(Number(e.target.value))} />
++              </Tip>
+             </label>
+             <label className="label">
+               Largo (Z)
+-              <input type="number" min={1} max={MAX_AXIS} value={dz} onChange={(e) => setDz(Number(e.target.value))} />
++              <Tip id="designs.dimZ">
++                <input type="number" min={1} max={MAX_AXIS} value={dz} onChange={(e) => setDz(Number(e.target.value))} />
++              </Tip>
+             </label>
+           </div>
+           <div className="row">
+-            <button
+-              onClick={() => {
+-                s.newDesign({ x: clampAxis(dx), y: clampAxis(dy), z: clampAxis(dz) }, newName)
+-                onClose()
+-              }}
+-              data-testid="create-design"
+-            >
+-              Crear
+-            </button>
+-            <button
+-              className="ghost"
+-              onClick={() => s.resize({ x: clampAxis(dx), y: clampAxis(dy), z: clampAxis(dz) })}
+-              title="Cambia el tamaño del diseño actual; lo que quede fuera se descarta"
+-            >
+-              Redimensionar el actual
+-            </button>
++            <Tip id="designs.create">
++              <button
++                onClick={() => {
++                  s.newDesign({ x: clampAxis(dx), y: clampAxis(dy), z: clampAxis(dz) }, newName)
++                  onClose()
++                }}
++                data-testid="create-design"
++              >
++                Crear
++              </button>
++            </Tip>
++            <Tip id="designs.resize">
++              <button
++                className="ghost"
++                onClick={() => s.resize({ x: clampAxis(dx), y: clampAxis(dy), z: clampAxis(dz) })}
++              >
++                Redimensionar el actual
++              </button>
++            </Tip>
+           </div>
+         </div>
+ 
+@@ -89,17 +101,21 @@ export function DesignsPanel({ onClose }: { onClose: () => void }) {
+                       {new Date(d.updatedAt).toLocaleString('es-AR')}
+                     </span>
+                   </div>
+-                  <button
+-                    onClick={async () => {
+-                      await s.openDesign(d.id)
+-                      onClose()
+-                    }}
+-                  >
+-                    Abrir
+-                  </button>
+-                  <button className="danger ghost" onClick={() => s.deleteDesign(d.id)} title="Borrar">
+-                    ✕
+-                  </button>
++                  <Tip id="designs.open" extra={d.name}>
++                    <button
++                      onClick={async () => {
++                        await s.openDesign(d.id)
++                        onClose()
++                      }}
++                    >
++                      Abrir
++                    </button>
++                  </Tip>
++                  <Tip id="designs.delete" extra={d.name}>
++                    <button className="danger ghost" onClick={() => s.deleteDesign(d.id)}>
++                      ✕
++                    </button>
++                  </Tip>
+                 </div>
+               ))}
+             </div>
+@@ -107,7 +123,9 @@ export function DesignsPanel({ onClose }: { onClose: () => void }) {
+         </div>
+ 
+         <div className="row" style={{ justifyContent: 'flex-end' }}>
+-          <button onClick={onClose}>Cerrar</button>
++          <Tip id="designs.close">
++            <button onClick={onClose}>Cerrar</button>
++          </Tip>
+         </div>
+       </div>
+     </div>
+diff --git a/src/ui/GuideView.tsx b/src/ui/GuideView.tsx
+index 29c810e..83813bd 100644
+--- a/src/ui/GuideView.tsx
++++ b/src/ui/GuideView.tsx
+@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
+ import { useEditor } from '../state/store'
+ import { blockDef } from '../blocks/palette'
+ import { buildGuide, luminance, openPrintableGuide, stacksLabel, type Guide, type GuideStep } from '../export/guide'
++import { Tip } from './Tip'
+ 
+ function LayerSvg({ step, guide, cell = 24 }: { step: GuideStep; guide: Guide; cell?: number }) {
+   const pad = 22
+@@ -92,7 +93,9 @@ export function GuideView() {
+         <div className="empty" style={{ maxWidth: 460, margin: '60px auto' }}>
+           Todavía no hay bloques. Volvé al editor y construí algo.
+           <div style={{ marginTop: 12 }}>
+-            <button onClick={() => setView('edit')}>Ir al editor</button>
++            <Tip id="guide.back">
++              <button onClick={() => setView('edit')}>Ir al editor</button>
++            </Tip>
+           </div>
+         </div>
+       </div>
+@@ -109,30 +112,43 @@ export function GuideView() {
+           {guide.totalBlocks} bloques · {guide.steps.length} pasos ·
+           ocupa {guide.width}×{guide.height}×{guide.depth}
+         </span>
+-        <button onClick={() => openPrintableGuide(guide, meta)}>Imprimir / PDF</button>
++        <Tip id="guide.print" side="bottom">
++          <button onClick={() => openPrintableGuide(guide, meta)}>Imprimir / PDF</button>
++        </Tip>
+       </div>
+ 
+       <div className="steps-strip">
+         {guide.steps.map((s, idx) => (
+-          <button key={s.n} className={idx === i ? 'on' : ''} onClick={() => setI(idx)}>
+-            {s.repeat > 1 ? `y${s.fromY}–${s.toY}` : `y${s.fromY}`}
+-          </button>
++          <Tip
++            key={s.n}
++            id="guide.steps"
++            side="bottom"
++            extra={s.repeat > 1 ? `Paso ${s.n}: capas y${s.fromY} a y${s.toY}` : `Paso ${s.n}: capa y${s.fromY}`}
++          >
++            <button className={idx === i ? 'on' : ''} onClick={() => setI(idx)}>
++              {s.repeat > 1 ? `y${s.fromY}–${s.toY}` : `y${s.fromY}`}
++            </button>
++          </Tip>
+         ))}
+       </div>
+ 
+       <div className="nav">
+-        <button onClick={() => setI((v) => Math.max(0, v - 1))} disabled={i === 0}>← Anterior</button>
++        <Tip id="guide.prev" side="bottom">
++          <button onClick={() => setI((v) => Math.max(0, v - 1))} disabled={i === 0}>← Anterior</button>
++        </Tip>
+         <b data-testid="guide-step">
+           Paso {step.n} de {guide.steps.length} — capa y = {step.fromY}
+           {step.repeat > 1 ? ` a ${step.toY}` : ''}
+         </b>
+         {step.repeat > 1 && <span className="rep">repetir {step.repeat}×</span>}
+-        <button
+-          onClick={() => setI((v) => Math.min(guide.steps.length - 1, v + 1))}
+-          disabled={i >= guide.steps.length - 1}
+-        >
+-          Siguiente →
+-        </button>
++        <Tip id="guide.next" side="bottom">
++          <button
++            onClick={() => setI((v) => Math.min(guide.steps.length - 1, v + 1))}
++            disabled={i >= guide.steps.length - 1}
++          >
++            Siguiente →
++          </button>
++        </Tip>
+       </div>
+ 
+       <div className="guide-cols">
+diff --git a/src/ui/PalettePanel.tsx b/src/ui/PalettePanel.tsx
+index 0740365..eada9a0 100644
+--- a/src/ui/PalettePanel.tsx
++++ b/src/ui/PalettePanel.tsx
+@@ -2,6 +2,17 @@ import { useMemo, useState } from 'react'
+ import { BLOCKS, CATEGORIES, blockDef, type Category } from '../blocks/palette'
+ import { blockThumbnail } from '../blocks/atlas'
+ import { useEditor } from '../state/store'
++import { Tip } from './Tip'
++import type { HelpId } from './ayuda'
++
++const CAT_TIPS: Record<Category, HelpId> = {
++  stone: 'palette.catStone',
++  wood: 'palette.catWood',
++  nature: 'palette.catNature',
++  wool: 'palette.catWool',
++  concrete: 'palette.catConcrete',
++  decorative: 'palette.catDecorative',
++}
+ 
+ export function PalettePanel() {
+   const block = useEditor((s) => s.block)
+@@ -22,46 +33,59 @@ export function PalettePanel() {
+ 
+   return (
+     <div className="side">
+-      <div className="current">
+-        <img src={blockThumbnail(current.tex.side)} alt="" />
+-        <div style={{ minWidth: 0 }}>
+-          <div className="nm">{current.name}</div>
+-          <div className="id">{current.id.replace('minecraft:', '')}</div>
++      <Tip id="palette.current" side="right">
++        <div className="current" tabIndex={0}>
++          <img src={blockThumbnail(current.tex.side)} alt="" />
++          <div style={{ minWidth: 0 }}>
++            <div className="nm">{current.name}</div>
++            <div className="id">{current.id.replace('minecraft:', '')}</div>
++          </div>
+         </div>
+-      </div>
++      </Tip>
+ 
+       <div className="section">
+-        <input
+-          type="text"
+-          placeholder="Buscar bloque…"
+-          value={q}
+-          onChange={(e) => setQ(e.target.value)}
+-          aria-label="Buscar bloque"
+-        />
++        <Tip id="palette.search" side="right">
++          <input
++            type="text"
++            placeholder="Buscar bloque…"
++            value={q}
++            onChange={(e) => setQ(e.target.value)}
++            aria-label="Buscar bloque"
++          />
++        </Tip>
+       </div>
+ 
+       <div className="cats">
+-        <button className={cat === 'all' ? 'on' : ''} onClick={() => setCat('all')}>
+-          Todos
+-        </button>
+-        {CATEGORIES.map((c) => (
+-          <button key={c.key} className={cat === c.key ? 'on' : ''} onClick={() => setCat(c.key)}>
+-            {c.label}
++        <Tip id="palette.catAll" side="right">
++          <button className={cat === 'all' ? 'on' : ''} onClick={() => setCat('all')}>
++            Todos
+           </button>
++        </Tip>
++        {CATEGORIES.map((c) => (
++          <Tip key={c.key} id={CAT_TIPS[c.key]} side="right">
++            <button className={cat === c.key ? 'on' : ''} onClick={() => setCat(c.key)}>
++              {c.label}
++            </button>
++          </Tip>
+         ))}
+       </div>
+ 
+       <div className="blocks">
+         {list.map((b) => (
+-          <button
++          <Tip
+             key={b.id}
+-            className={`blk${b.id === block ? ' sel' : ''}`}
+-            title={`${b.name}\n${b.id}`}
+-            onClick={() => setBlock(b.id)}
+-            data-block={b.id}
++            id="palette.block"
++            side="right"
++            extra={`${b.name} · ${b.id.replace('minecraft:', '')}`}
+           >
+-            <img src={blockThumbnail(b.tex.side)} alt={b.name} />
+-          </button>
++            <button
++              className={`blk${b.id === block ? ' sel' : ''}`}
++              onClick={() => setBlock(b.id)}
++              data-block={b.id}
++            >
++              <img src={blockThumbnail(b.tex.side)} alt={b.name} />
++            </button>
++          </Tip>
+         ))}
+       </div>
+       {list.length === 0 && <p className="hint" style={{ marginTop: 10 }}>Sin resultados.</p>}
+diff --git a/src/ui/ToolPanel.tsx b/src/ui/ToolPanel.tsx
+index fe4cbaf..7ab9674 100644
+--- a/src/ui/ToolPanel.tsx
++++ b/src/ui/ToolPanel.tsx
+@@ -3,6 +3,8 @@ import { useEditor } from '../state/store'
+ import { blockDef } from '../blocks/palette'
+ import { sliceExtent } from '../voxel/ops'
+ import { stacksLabel } from '../export/guide'
++import { Tip } from './Tip'
++import type { HelpId } from './ayuda'
+ import type { Axis, Tool } from '../types'
+ 
+ const TOOLS: { id: Tool; icon: string; label: string; key: string }[] = [
+@@ -15,10 +17,10 @@ const TOOLS: { id: Tool; icon: string; label: string; key: string }[] = [
+   { id: 'select', icon: '⬚', label: 'Selección (modo capa)', key: 'S' },
+ ]
+ 
+-const AXES: { id: Axis; label: string; help: string }[] = [
+-  { id: 'y', label: 'Y', help: 'Capas horizontales — pisos' },
+-  { id: 'x', label: 'X', help: 'Cortes verticales este-oeste — paredes' },
+-  { id: 'z', label: 'Z', help: 'Cortes verticales norte-sur — fachadas' },
++const AXES: { id: Axis; label: string; tip: HelpId }[] = [
++  { id: 'y', label: 'Y', tip: 'slice.axisY' },
++  { id: 'x', label: 'X', tip: 'slice.axisX' },
++  { id: 'z', label: 'Z', tip: 'slice.axisZ' },
+ ]
+ 
+ export function ToolPanel() {
+@@ -39,22 +41,24 @@ export function ToolPanel() {
+         <h3>Herramienta</h3>
+         <div className="tools">
+           {TOOLS.map((t) => (
+-            <button
+-              key={t.id}
+-              className={s.tool === t.id ? 'on' : ''}
+-              title={`${t.label} (${t.key})`}
+-              onClick={() => s.setTool(t.id)}
+-              data-tool={t.id}
+-            >
+-              {t.icon}
+-            </button>
++            <Tip key={t.id} id={`tool.${t.id}`} side="left">
++              <button
++                className={s.tool === t.id ? 'on' : ''}
++                onClick={() => s.setTool(t.id)}
++                data-tool={t.id}
++              >
++                {t.icon}
++              </button>
++            </Tip>
+           ))}
+         </div>
+         {s.tool === 'rect' && (
+           <div className="toggles" style={{ marginTop: 6 }}>
+-            <button className={s.rectFilled ? 'on' : ''} onClick={() => s.toggle('rectFilled')}>
+-              {s.rectFilled ? 'Relleno' : 'Contorno'}
+-            </button>
++            <Tip id="tool.rectFilled" side="left">
++              <button className={s.rectFilled ? 'on' : ''} onClick={() => s.toggle('rectFilled')}>
++                {s.rectFilled ? 'Relleno' : 'Contorno'}
++              </button>
++            </Tip>
+           </div>
+         )}
+         {s.anchor && (
+@@ -67,49 +71,61 @@ export function ToolPanel() {
+       <div className="section">
+         <h3>Modo capa</h3>
+         <div className="toggles">
+-          <button className={s.sliceView === 'off' ? 'on' : ''} onClick={() => s.setSliceView('off')}>
+-            3D
+-          </button>
+-          <button className={s.sliceView === 'below' ? 'on' : ''} onClick={() => s.setSliceView('below')}>
+-            Hasta acá
+-          </button>
+-          <button className={s.sliceView === 'isolate' ? 'on' : ''} onClick={() => s.setSliceView('isolate')}>
+-            Sólo capa
+-          </button>
++          <Tip id="slice.off" side="left">
++            <button className={s.sliceView === 'off' ? 'on' : ''} onClick={() => s.setSliceView('off')}>
++              3D
++            </button>
++          </Tip>
++          <Tip id="slice.below" side="left">
++            <button className={s.sliceView === 'below' ? 'on' : ''} onClick={() => s.setSliceView('below')}>
++              Hasta acá
++            </button>
++          </Tip>
++          <Tip id="slice.isolate" side="left">
++            <button className={s.sliceView === 'isolate' ? 'on' : ''} onClick={() => s.setSliceView('isolate')}>
++              Sólo capa
++            </button>
++          </Tip>
+         </div>
+ 
+         {s.sliceView !== 'off' && (
+           <>
+             <div className="toggles" style={{ marginTop: 7 }}>
+               {AXES.map((a) => (
+-                <button
+-                  key={a.id}
+-                  title={a.help}
+-                  className={s.sliceAxis === a.id ? 'on' : ''}
+-                  onClick={() => s.setSliceAxis(a.id)}
+-                >
+-                  {a.label}
+-                </button>
++                <Tip key={a.id} id={a.tip} side="left">
++                  <button
++                    className={s.sliceAxis === a.id ? 'on' : ''}
++                    onClick={() => s.setSliceAxis(a.id)}
++                  >
++                    {a.label}
++                  </button>
++                </Tip>
+               ))}
+             </div>
+             <div className="slice-num" data-testid="slice-index">
+               {s.sliceAxis} = {s.sliceIndex}
+             </div>
+-            <input
+-              type="range"
+-              min={0}
+-              max={max}
+-              value={s.sliceIndex}
+-              onChange={(e) => s.setSliceIndex(Number(e.target.value))}
+-              aria-label="Índice de capa"
+-            />
++            <Tip id="slice.index" side="left">
++              <input
++                type="range"
++                min={0}
++                max={max}
++                value={s.sliceIndex}
++                onChange={(e) => s.setSliceIndex(Number(e.target.value))}
++                aria-label="Índice de capa"
++              />
++            </Tip>
+             <div className="row" style={{ marginTop: 5 }}>
+-              <button className="ghost" onClick={() => s.setSliceIndex(s.sliceIndex - 1)} disabled={s.sliceIndex === 0}>
+-                ▼
+-              </button>
+-              <button className="ghost" onClick={() => s.setSliceIndex(s.sliceIndex + 1)} disabled={s.sliceIndex >= max}>
+-                ▲
+-              </button>
++              <Tip id="slice.down" side="left">
++                <button className="ghost" onClick={() => s.setSliceIndex(s.sliceIndex - 1)} disabled={s.sliceIndex === 0}>
++                  ▼
++                </button>
++              </Tip>
++              <Tip id="slice.up" side="left">
++                <button className="ghost" onClick={() => s.setSliceIndex(s.sliceIndex + 1)} disabled={s.sliceIndex >= max}>
++                  ▲
++                </button>
++              </Tip>
+               <span className="label">de 0 a {max}</span>
+             </div>
+           </>
+@@ -119,12 +135,16 @@ export function ToolPanel() {
+       <div className="section">
+         <h3>Simetría</h3>
+         <div className="toggles">
+-          <button className={s.mirrorX ? 'on' : ''} onClick={() => s.toggle('mirrorX')} title="Espejar en X">
+-            Espejo X
+-          </button>
+-          <button className={s.mirrorZ ? 'on' : ''} onClick={() => s.toggle('mirrorZ')} title="Espejar en Z">
+-            Espejo Z
+-          </button>
++          <Tip id="mirror.x" side="left">
++            <button className={s.mirrorX ? 'on' : ''} onClick={() => s.toggle('mirrorX')}>
++              Espejo X
++            </button>
++          </Tip>
++          <Tip id="mirror.z" side="left">
++            <button className={s.mirrorZ ? 'on' : ''} onClick={() => s.toggle('mirrorZ')}>
++              Espejo Z
++            </button>
++          </Tip>
+         </div>
+       </div>
+ 
+@@ -132,10 +152,18 @@ export function ToolPanel() {
+         <div className="section">
+           <h3>Selección</h3>
+           <div className="toggles">
+-            <button onClick={() => s.copySelection(false)} disabled={!s.selection}>Copiar</button>
+-            <button onClick={() => s.copySelection(true)} disabled={!s.selection}>Cortar</button>
+-            <button className="danger" onClick={() => s.deleteSelection()} disabled={!s.selection}>Borrar</button>
+-            <button onClick={() => s.clearSelection()} disabled={!s.selection}>Quitar</button>
++            <Tip id="selection.copy" side="left">
++              <button onClick={() => s.copySelection(false)} disabled={!s.selection}>Copiar</button>
++            </Tip>
++            <Tip id="selection.cut" side="left">
++              <button onClick={() => s.copySelection(true)} disabled={!s.selection}>Cortar</button>
++            </Tip>
++            <Tip id="selection.delete" side="left">
++              <button className="danger" onClick={() => s.deleteSelection()} disabled={!s.selection}>Borrar</button>
++            </Tip>
++            <Tip id="selection.clear" side="left">
++              <button onClick={() => s.clearSelection()} disabled={!s.selection}>Quitar</button>
++            </Tip>
+           </div>
+           {s.clipboard && (
+             <p className="hint" style={{ marginTop: 6 }}>
+@@ -147,7 +175,9 @@ export function ToolPanel() {
+       )}
+ 
+       <div className="section">
+-        <h3>Materiales ({totalBlocks})</h3>
++        <Tip id="panel.materials" side="left">
++          <h3 tabIndex={0}>Materiales ({totalBlocks})</h3>
++        </Tip>
+         <div className="mats" data-testid="materials">
+           {totals.slice(0, 40).map(([id, n]) => {
+             const d = blockDef(id)
+diff --git a/src/ui/TopBar.tsx b/src/ui/TopBar.tsx
+index bb33b9f..e7d3917 100644
+--- a/src/ui/TopBar.tsx
++++ b/src/ui/TopBar.tsx
+@@ -3,6 +3,7 @@ import { useEditor } from '../state/store'
+ import { downloadBlob, downloadDesignJson, readDesignFile, slugify } from '../export/files'
+ import { buildSchem } from '../export/schem'
+ import { buildGuide, openPrintableGuide } from '../export/guide'
++import { Tip } from './Tip'
+ 
+ export function TopBar({ onOpenDesigns }: { onOpenDesigns: () => void }) {
+   const s = useEditor()
+@@ -44,57 +45,73 @@ export function TopBar({ onOpenDesigns }: { onOpenDesigns: () => void }) {
+         MC Blueprint
+       </div>
+ 
+-      <input
+-        className="name-input"
+-        type="text"
+-        value={s.meta.name}
+-        onChange={(e) => s.rename(e.target.value)}
+-        aria-label="Nombre del diseño"
+-        data-testid="design-name"
+-      />
++      <Tip id="topbar.name" side="bottom">
++        <input
++          className="name-input"
++          type="text"
++          value={s.meta.name}
++          onChange={(e) => s.rename(e.target.value)}
++          aria-label="Nombre del diseño"
++          data-testid="design-name"
++        />
++      </Tip>
+ 
+       <div className="grp">
+-        <button onClick={onOpenDesigns} data-testid="open-designs">Diseños</button>
+-        <button onClick={() => s.saveCurrent()} disabled={s.busy} data-testid="save">
+-          Guardar
+-        </button>
++        <Tip id="topbar.designs" side="bottom">
++          <button onClick={onOpenDesigns} data-testid="open-designs">Diseños</button>
++        </Tip>
++        <Tip id="topbar.save" side="bottom">
++          <button onClick={() => s.saveCurrent()} disabled={s.busy} data-testid="save">
++            Guardar
++          </button>
++        </Tip>
+       </div>
+ 
+       <div className="grp">
+-        <button onClick={() => s.undo()} disabled={!s.canUndo} title="Deshacer (Ctrl+Z)">↶</button>
+-        <button onClick={() => s.redo()} disabled={!s.canRedo} title="Rehacer (Ctrl+Shift+Z)">↷</button>
++        <Tip id="topbar.undo" side="bottom">
++          <button onClick={() => s.undo()} disabled={!s.canUndo}>↶</button>
++        </Tip>
++        <Tip id="topbar.redo" side="bottom">
++          <button onClick={() => s.redo()} disabled={!s.canRedo}>↷</button>
++        </Tip>
+       </div>
+ 
+       <div className="grp">
+-        <button
+-          className={s.view === 'edit' ? 'on' : ''}
+-          onClick={() => s.setView('edit')}
+-          data-testid="view-edit"
+-        >
+-          Editar
+-        </button>
+-        <button
+-          className={s.view === 'guide' ? 'on' : ''}
+-          onClick={() => s.setView('guide')}
+-          data-testid="view-guide"
+-        >
+-          Guía
+-        </button>
++        <Tip id="topbar.viewEdit" side="bottom">
++          <button
++            className={s.view === 'edit' ? 'on' : ''}
++            onClick={() => s.setView('edit')}
++            data-testid="view-edit"
++          >
++            Editar
++          </button>
++        </Tip>
++        <Tip id="topbar.viewGuide" side="bottom">
++          <button
++            className={s.view === 'guide' ? 'on' : ''}
++            onClick={() => s.setView('guide')}
++            data-testid="view-guide"
++          >
++            Guía
++          </button>
++        </Tip>
+       </div>
+ 
+       <div className="spacer" />
+ 
+       <div className="grp">
+-        <button onClick={printGuide} title="Abre la guía lista para imprimir o guardar como PDF">
+-          Imprimir guía
+-        </button>
+-        <button onClick={() => downloadDesignJson(s.toStored())} title="Descargar diseño como .mcbp.json">
+-          Exportar JSON
+-        </button>
+-        <button onClick={exportSchem} title="Exportar .schem para WorldEdit / Litematica">
+-          Exportar .schem
+-        </button>
+-        <button onClick={() => fileRef.current?.click()}>Importar</button>
++        <Tip id="topbar.printGuide" side="bottom">
++          <button onClick={printGuide}>Imprimir guía</button>
++        </Tip>
++        <Tip id="topbar.exportJson" side="bottom">
++          <button onClick={() => downloadDesignJson(s.toStored())}>Exportar JSON</button>
++        </Tip>
++        <Tip id="topbar.exportSchem" side="bottom">
++          <button onClick={exportSchem}>Exportar .schem</button>
++        </Tip>
++        <Tip id="topbar.import" side="bottom">
++          <button onClick={() => fileRef.current?.click()}>Importar</button>
++        </Tip>
+         <input
+           ref={fileRef}
+           type="file"
+@@ -107,9 +124,11 @@ export function TopBar({ onOpenDesigns }: { onOpenDesigns: () => void }) {
+         />
+       </div>
+ 
+-      <span className={`chip${s.storageMode === 'cloud' ? ' cloud' : ''}`}>
+-        {s.storageMode === 'cloud' ? '☁ nube' : '💾 este navegador'}
+-      </span>
++      <Tip id="topbar.storage" side="bottom">
++        <span className={`chip${s.storageMode === 'cloud' ? ' cloud' : ''}`} tabIndex={0}>
++          {s.storageMode === 'cloud' ? '☁ nube' : '💾 este navegador'}
++        </span>
++      </Tip>
+     </header>
+   )
+ }
