@@ -78,3 +78,39 @@ test('soltar mientras se pinta cierra el trazo y restaura la órbita', () => {
   expect(c.out.orbitEnabled).toBe(true)
   expect(c.out.classified).toBe('drag')
 })
+
+const ABORTS = ['cancel', 'lostCapture', 'blur', 'unmount'] as const
+
+for (const kind of ABORTS) {
+  test(`${kind} durante el pintado restaura la órbita y cierra el trazo`, () => {
+    const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), BUILD)
+    const b = step(a.state, { kind: 'move', x: 110, y: 100, cell: { x: 2, y: 0, z: 1 } }, BUILD)
+    const c = step(b.state, { kind }, BUILD)
+
+    expect(c.state.phase).toBe('idle')
+    expect(c.out.orbitEnabled).toBe(true)
+    expect(c.out.closeStroke).toBe(true)
+    expect(c.out.release).toBe(1)
+    expect(c.out.aborted).toBe(kind)
+    expect(c.out.commit).toBeUndefined()
+  })
+
+  test(`${kind} en pending no deja trazo abierto`, () => {
+    const a = step(initialState, downAt(100, 100, { x: 1, y: 0, z: 1 }), BUILD)
+    const b = step(a.state, { kind }, BUILD)
+
+    expect(b.state.phase).toBe('idle')
+    expect(b.out.orbitEnabled).toBe(true)
+    expect(b.out.closeStroke).toBeUndefined()
+    expect(b.out.aborted).toBe(kind)
+  })
+}
+
+test('abortar dos veces seguidas es inocuo', () => {
+  const a = step(initialState, downAt(100, 100, null), BUILD)
+  const b = step(a.state, { kind: 'cancel' }, BUILD)
+  const c = step(b.state, { kind: 'cancel' }, BUILD)
+
+  expect(c.state.phase).toBe('idle')
+  expect(c.out.orbitEnabled).toBe(true)
+})

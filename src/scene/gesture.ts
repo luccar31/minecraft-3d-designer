@@ -61,6 +61,23 @@ export function step(
   input: Input,
   _ctx: Ctx,
 ): { state: GestureState; out: Output } {
+  if (
+    input.kind === 'cancel' || input.kind === 'lostCapture' ||
+    input.kind === 'blur' || input.kind === 'unmount'
+  ) {
+    // Single exit path. There used to be four, and three left orbit dead.
+    return {
+      state: idle(),
+      out: {
+        phase: 'idle',
+        orbitEnabled: true,
+        release: state.pointerId ?? undefined,
+        closeStroke: state.phase === 'painting' ? true : undefined,
+        aborted: input.kind,
+      },
+    }
+  }
+
   if (input.kind === 'down') {
     return {
       state: {
