@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { initialState, step, type Cell, type Ctx, type Input, type Mods } from '../src/scene/gesture'
+import { spaceDown, spaceUp } from '../src/scene/modeKeys'
 
 const NO_MODS: Mods = { shift: false, alt: false, ctrl: false, meta: false }
 const BUILD: Ctx = { mode: 'build', dragTool: true }
@@ -176,4 +177,30 @@ test('soltar tras navegar vuelve a idle sin escribir', () => {
   expect(b.state.phase).toBe('idle')
   expect(b.out.commit).toBeUndefined()
   expect(b.out.classified).toBe('camera')
+})
+
+test('un toque corto de Space alterna de build a navigate', () => {
+  const d = spaceDown('build', 1000)
+  expect(d.mode).toBe('navigate')
+  const u = spaceUp(d.state, 1100, false)
+  expect(u.mode).toBe('navigate')
+})
+
+test('un toque corto de Space alterna de navigate a build', () => {
+  const d = spaceDown('navigate', 1000)
+  expect(d.mode).toBe('navigate')
+  const u = spaceUp(d.state, 1100, false)
+  expect(u.mode).toBe('build')
+})
+
+test('mantener Space y soltar restaura el modo previo', () => {
+  const d = spaceDown('build', 1000)
+  const u = spaceUp(d.state, 1600, false)
+  expect(u.mode).toBe('build')
+})
+
+test('mover la cámara mientras se mantiene lo hace transitorio aunque sea rápido', () => {
+  const d = spaceDown('build', 1000)
+  const u = spaceUp(d.state, 1100, true)
+  expect(u.mode).toBe('build')
 })
