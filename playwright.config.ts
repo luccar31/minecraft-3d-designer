@@ -1,12 +1,18 @@
 import { defineConfig } from '@playwright/test'
 
+/**
+ * Un puerto por worktree. Con el puerto fijo y `reuseExistingServer`, dos
+ * worktrees se testean contra el `dist` del otro y dan falsos verdes.
+ */
+const PORT = Number(process.env.PLAYWRIGHT_PORT ?? 4173)
+
 export default defineConfig({
   testDir: './tests',
   timeout: 60_000,
   fullyParallel: false,
   workers: 1,
   use: {
-    baseURL: 'http://127.0.0.1:4173',
+    baseURL: `http://127.0.0.1:${PORT}`,
     headless: true,
     launchOptions: {
       // CHROMIUM_PATH permite usar un Chromium ya instalado (CI, sandboxes).
@@ -27,8 +33,8 @@ export default defineConfig({
     },
   },
   webServer: {
-    command: 'npm run preview -- --port 4173 --host 127.0.0.1',
-    url: 'http://127.0.0.1:4173',
+    command: `npm run preview -- --port ${PORT} --host 127.0.0.1`,
+    url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: true,
     timeout: 120_000,
   },
