@@ -160,7 +160,39 @@ tape lo que hay detrás.
 
 ## 4. Interacción
 
+### 4.0 Modelo modal
+
+El editor tiene dos modos, al estilo CAD: **construir** y **navegar**. En
+`build` el arrastre nunca mueve la cámara; en `navigate` nunca escribe. Es lo
+que elimina de raíz la ambigüedad de "¿este arrastre pinta u orbita?", que sin
+modo es indecidible sobre una construcción que llena el viewport.
+
+`Espacio` cambia de modo y se resuelve **al soltar**: un toque de menos de
+250 ms alterna, mantenerlo es transitorio y vuelve al modo previo. Orbitar
+mientras se mantiene lo marca como transitorio aunque dure menos de 250 ms. El
+botón del medio orbita en cualquiera de los dos modos, como escape universal.
+
+El modo arranca siempre en `build` y **no persiste** entre sesiones: encontrarse
+en un modo elegido hace tres días es exactamente el error que la señalización
+intenta evitar. Se señaliza tres veces en paralelo: el botón del viewport, el
+cursor del sistema (cruz o mano) y un borde teñido en `navigate`.
+
+**Umbral click/arrastre:** 4 px con mouse o lápiz, 10 px con touch. Por debajo
+del umbral el gesto es un click y escribe una sola celda; por encima abre un
+trazo. En el `pointerdown` no se escribe nada: la celda candidata se guarda y se
+confirma recién al cruzar el umbral o al soltar. `brush` y `eraser` son las
+únicas herramientas de arrastre; con las de click (`picker`, `line`, `rect`,
+`fill`, `select`) cruzar el umbral pasa el gesto a la cámara.
+
+La máquina de estados vive en `src/scene/gesture.ts` como función pura, sin
+React ni three, con un solo camino de limpieza: `cancel`, `lostCapture`, `blur`
+y `unmount` entran todos por el mismo `abort()`, que restaura la órbita, cierra
+el trazo y libera la captura del puntero.
+
 ### 4.1 Picking
+
+`src/scene/picking.ts` es la única fuente de verdad de la celda: la consumen
+por igual el cursor, el click y el arrastre, así no pueden discrepar.
 
 El raycast devuelve punto de impacto `p` y normal de cara `n`:
 
@@ -168,7 +200,9 @@ El raycast devuelve punto de impacto `p` y normal de cara `n`:
 - Celda de colocación: `floor(p + n × 0.5)`
 
 Un *build plate* (plano en `y = 0` del tamaño de la grilla) recibe los clicks cuando
-todavía no hay nada construido.
+todavía no hay nada construido. El build plate y el plano de capa son planos sin
+espesor: **detrás no hay bloque**, así que el bloque apuntado es `null` y la goma
+no tiene nada que borrar. Sin esa regla la goma apunta a `y = -1`.
 
 ### 4.2 Modo capa (slice)
 

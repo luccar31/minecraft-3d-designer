@@ -64,17 +64,28 @@ npm run test          # tests end-to-end con Playwright
 | Colocar bloque | Click izquierdo |
 | Borrar | `Shift` + click, o la herramienta goma |
 | Cuentagotas | `Alt` + click |
-| Pintar varios | Arrastrar |
-| Orbitar | Arrastrar sobre el vacío |
+| Pintar varios | Arrastrar (en modo Construir) |
+| Cambiar de modo | `Espacio` (un toque alterna, mantenerlo es transitorio) |
+| Orbitar | Modo Navegar, o botón del medio, o arrastrar sobre el vacío |
 | Paneo | Arrastrar con el botón derecho |
 | Zoom | Rueda |
 | Encuadrar | `C` |
 
-Atajos de teclado: `B` pincel, `E` goma, `I` cuentagotas, `L` línea, `R`
-rectángulo, `F` relleno, `S` selección · `1` / `2` / `3` modo 3D / hasta acá /
-sólo capa · `↑` `↓` cambiar de capa · `X` `Z` espejos · `G` grilla ·
-`Ctrl+Z` / `Ctrl+Shift+Z` · `Ctrl+S` guardar · `Ctrl+C` `Ctrl+X` `Ctrl+V` ·
-`Supr` borrar selección · `Esc` cancelar.
+El editor es **modal**, como un CAD. En **Construir** el arrastre pinta y nunca
+mueve la cámara; en **Navegar** el arrastre mueve la cámara y nunca escribe. El
+modo se ve en tres lugares a la vez: el botón del viewport, el cursor del
+sistema (cruz o mano) y un borde teñido cuando estás en Navegar. Arranca siempre
+en Construir y no se recuerda entre sesiones.
+
+Click y arrastre se distinguen por distancia: hasta 4 px con mouse (10 px con
+dedo o lápiz) el gesto sigue siendo un click, así que un pulso de la mano ya no
+pinta una tira.
+
+Atajos de teclado: `Espacio` construir/navegar · `B` pincel, `E` goma, `I`
+cuentagotas, `L` línea, `R` rectángulo, `F` relleno, `S` selección · `1` / `2` /
+`3` modo 3D / hasta acá / sólo capa · `↑` `↓` cambiar de capa · `X` `Z` espejos ·
+`G` grilla · `Ctrl+Z` / `Ctrl+Shift+Z` · `Ctrl+S` guardar · `Ctrl+C` `Ctrl+X`
+`Ctrl+V` · `Supr` borrar selección · `Esc` cancelar.
 
 ## Guardar en la nube (opcional)
 

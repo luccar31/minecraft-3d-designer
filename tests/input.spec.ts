@@ -213,6 +213,122 @@ test('encuadrar con un solo bloque no mete la cámara adentro', async ({ page })
   expect(dist!).toBeGreaterThan(6)
 })
 
+const poseCount = (page: Page) =>
+  page.evaluate(() => {
+    const events = JSON.parse(window.__mcb.tel.toJSON()).events as { ev: string }[]
+    return events.filter((e) => e.ev === 'camera.pose').length
+  })
+
+test('en navigate, el mismo arrastre sí mueve la cámara sobre la construcción', async ({ page }) => {
+  await ready(page)
+  await platform(page)
+  await page.evaluate(() => {
+    window.__mcb.store.getState().setMode('navigate')
+    window.__mcb.tel.clear()
+  })
+  const box = (await page.locator('canvas').boundingBox())!
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2 + 30, { steps: 10 })
+  await page.mouse.up()
+  await page.waitForTimeout(200)
+
+  expect(await poseCount(page)).toBeGreaterThan(0)
+})
+
+test('el cursor no queda flotando cuando el puntero sale de la construcción', async ({ page }) => {
+  await ready(page)
+  await platform(page)
+  const box = (await page.locator('canvas').boundingBox())!
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.waitForTimeout(200)
+  expect(await page.evaluate(() => window.__mcb.store.getState().hover)).not.toBeNull()
+
+  await page.mouse.move(box.x + 4, box.y + 4)
+  await page.waitForTimeout(250)
+  expect(await page.evaluate(() => window.__mcb.store.getState().hover)).toBeNull()
+})
+
+test('perder el gesto a mitad de camino no deja la órbita trabada', async ({ page }) => {
+  await ready(page)
+  await platform(page)
+  const box = (await page.locator('canvas').boundingBox())!
+  const cx = box.x + box.width / 2
+  const cy = box.y + box.height / 2
+
+  await page.evaluate(() => window.__mcb.tel.clear())
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(cx + 12, cy, { steps: 4 })
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+  await page.mouse.up()
+  await page.waitForTimeout(200)
+
+  const aborted = await page.evaluate(() => {
+    const events = JSON.parse(window.__mcb.tel.toJSON()).events as
+      { ev: string; data?: Record<string, unknown> }[]
+    return events.filter((e) => e.ev === 'gesture.aborted').map((e) => e.data?.reason)
+  })
+  expect(aborted).toContain('blur')
+
+  // The old bug left controls.enabled false until a reload.
+  await page.evaluate(() => {
+    window.__mcb.store.getState().setMode('navigate')
+    window.__mcb.tel.clear()
+  })
+  await page.mouse.move(cx, cy)
+  await page.mouse.down()
+  await page.mouse.move(cx + 90, cy + 30, { steps: 10 })
+  await page.mouse.up()
+  await page.waitForTimeout(200)
+  expect(await poseCount(page)).toBeGreaterThan(0)
+})
+
+test('Espacio alterna el modo y la interfaz lo refleja', async ({ page }) => {
+  await ready(page)
+  await expect(page.getByTestId('mode-indicator')).toContainText('Construir')
+  await expect(page.locator('.viewport')).toHaveClass(/build/)
+
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('mode-indicator')).toContainText('Navegar')
+  await expect(page.locator('.viewport')).toHaveClass(/navigate/)
+
+  await page.keyboard.press('Space')
+  await expect(page.getByTestId('mode-indicator')).toContainText('Construir')
+})
+
+test('mantener Espacio y orbitar restaura el modo previo', async ({ page }) => {
+  await ready(page)
+  await platform(page)
+  const box = (await page.locator('canvas').boundingBox())!
+  const before = await count(page)
+
+  await page.keyboard.down('Space')
+  await expect(page.getByTestId('mode-indicator')).toContainText('Navegar')
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width / 2 + 90, box.y + box.height / 2 + 30, { steps: 10 })
+  await page.mouse.up()
+  await page.keyboard.up('Space')
+
+  await expect(page.getByTestId('mode-indicator')).toContainText('Construir')
+  expect(await count(page)).toBe(before)
+})
+
+test('la lectura de coordenadas sigue a la celda apuntada', async ({ page }) => {
+  await ready(page)
+  await platform(page)
+  const box = (await page.locator('canvas').boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.waitForTimeout(200)
+
+  const hover = (await page.evaluate(() => window.__mcb.store.getState().hover))!
+  await expect(page.getByTestId('coord-readout')).toContainText(`x ${hover.x}`)
+  await expect(page.getByTestId('coord-readout')).toContainText(`z ${hover.z}`)
+})
+
 test('en navigate, el registro no contiene ninguna escritura durante el gesto', async ({ page }) => {
   await ready(page)
   await platform(page)

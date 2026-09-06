@@ -10,6 +10,7 @@ import {
   AnchorMarker, Cursor, GhostSlice, GridBounds, Preview, SelectionBox, SlicePlane,
 } from './Overlays'
 import { worldToPlane } from '../voxel/ops'
+import { markCameraMoved } from './cameraActivity'
 import {
   initialState, step,
   type Cell, type Ctx, type GestureState, type Input, type Mods, type Output,
@@ -513,7 +514,10 @@ export function Scene() {
           RIGHT: THREE.MOUSE.PAN,
         }}
         ref={orbitRef}
-        onStart={() => rec(EV.orbitStart)}
+        onStart={() => {
+          markCameraMoved()
+          rec(EV.orbitStart)
+        }}
         onEnd={() => rec(EV.orbitEnd)}
         onChange={() => {
           // `change` payload only has `{type, target}`, and target is nulled
