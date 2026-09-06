@@ -181,4 +181,8 @@ export const EV = {
   unhandledRejection: def('error', 'unhandled-rejection', [], LEVEL.ACTIONS),
   invariant: def('error', 'invariant', [], LEVEL.ACTIONS),
   failure: def('error', 'failure', ['$where'], LEVEL.ACTIONS),
+
+  /* ── ws01 ── */
+  mode: def('tool', 'mode', ['$from', '$to', '$reason'], LEVEL.ACTIONS),
+  preview: def('pointer', 'preview', ['x', 'y', 'z', '$action', 'valid'], LEVEL.NORMAL),
 } as const

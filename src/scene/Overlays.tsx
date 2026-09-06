@@ -1,17 +1,103 @@
 import { useMemo } from 'react'
 import * as THREE from 'three'
-import type { Axis, BoxSel, Dims, Vec3 } from '../types'
+import type { Axis, BlockId, BoxSel, Dims, Vec3 } from '../types'
 import { blockDef } from '../blocks/palette'
 import type { World } from '../voxel/world'
 import { planeToWorld, worldToPlane } from '../voxel/ops'
+import type { Resolution, Vec3f } from './picking'
+
+/**
+ * Shared unit geometry. Built once: `new BoxGeometry()` inside a component
+ * body leaked one geometry per mouse move.
+ */
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1)
+const UNIT_EDGES = new THREE.EdgesGeometry(UNIT_BOX)
+const UNIT_PLANE = new THREE.PlaneGeometry(1, 1)
+
+const NO_RAY = () => null
+
+const PLACE_COLOR = '#7ee787'
+const ERASE_COLOR = '#ff6b6b'
+const PICK_COLOR = '#ffcf4a'
+
+const centerOf = (cell: Vec3): [number, number, number] => [
+  cell.x + 0.5,
+  cell.y + 0.5,
+  cell.z + 0.5,
+]
 
 export function Cursor({ cell, color = '#ffffff' }: { cell: Vec3 | null; color?: string }) {
   if (!cell) return null
   return (
-    <lineSegments position={[cell.x + 0.5, cell.y + 0.5, cell.z + 0.5]} renderOrder={3}>
-      <edgesGeometry args={[new THREE.BoxGeometry(1.02, 1.02, 1.02)]} />
+    <lineSegments
+      geometry={UNIT_EDGES}
+      position={centerOf(cell)}
+      scale={1.02}
+      raycast={NO_RAY}
+      renderOrder={3}
+    >
       <lineBasicMaterial color={color} depthTest={false} transparent opacity={0.95} />
     </lineSegments>
+  )
+}
+
+/** Orients the highlight quad along the pointed face's normal. */
+function faceRotation(n: Vec3f): [number, number, number] {
+  if (n.y !== 0) return [-Math.PI / 2, 0, 0]
+  if (n.x !== 0) return [0, Math.PI / 2, 0]
+  return [0, 0, 0]
+}
+
+/**
+ * What the next click will do, drawn before it happens: ghost block to place,
+ * silhouette to erase, and the face the new block leans against.
+ */
+export function Preview({ res, blockId }: { res: Resolution | null; blockId: BlockId }) {
+  const ghostColor = useMemo(() => blockDef(blockId).color, [blockId])
+  if (!res || !res.valid || !res.chosen || res.action === 'none') return null
+
+  const pos = centerOf(res.chosen)
+  const outline =
+    res.action === 'erase' ? ERASE_COLOR : res.action === 'pick' ? PICK_COLOR : PLACE_COLOR
+
+  return (
+    <>
+      {res.action === 'place' && (
+        <mesh geometry={UNIT_BOX} position={pos} scale={0.98} raycast={NO_RAY} renderOrder={2}>
+          <meshBasicMaterial color={ghostColor} transparent opacity={0.38} depthWrite={false} />
+        </mesh>
+      )}
+
+      {res.action === 'erase' && (
+        <mesh geometry={UNIT_BOX} position={pos} scale={1.01} raycast={NO_RAY} renderOrder={2}>
+          <meshBasicMaterial color={ERASE_COLOR} transparent opacity={0.3} depthWrite={false} />
+        </mesh>
+      )}
+
+      {res.action === 'place' && res.face && (
+        <mesh
+          geometry={UNIT_PLANE}
+          position={[
+            res.face.center.x + res.face.normal.x * 0.012,
+            res.face.center.y + res.face.normal.y * 0.012,
+            res.face.center.z + res.face.normal.z * 0.012,
+          ]}
+          rotation={faceRotation(res.face.normal)}
+          raycast={NO_RAY}
+          renderOrder={3}
+        >
+          <meshBasicMaterial
+            color={PLACE_COLOR}
+            transparent
+            opacity={0.28}
+            depthWrite={false}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+
+      <Cursor cell={res.chosen} color={outline} />
+    </>
   )
 }
 
@@ -21,7 +107,11 @@ export function GridBounds({ dims }: { dims: Dims }) {
     [dims.x, dims.y, dims.z],
   )
   return (
-    <lineSegments geometry={geo} position={[dims.x / 2, dims.y / 2, dims.z / 2]}>
+    <lineSegments
+      geometry={geo}
+      position={[dims.x / 2, dims.y / 2, dims.z / 2]}
+      raycast={NO_RAY}
+    >
       <lineBasicMaterial color="#3d4756" transparent opacity={0.75} />
     </lineSegments>
   )
@@ -32,14 +122,13 @@ export function SelectionBox({ sel }: { sel: BoxSel | null }) {
   const sx = sel.max.x - sel.min.x + 1
   const sy = sel.max.y - sel.min.y + 1
   const sz = sel.max.z - sel.min.z + 1
+  const scale: [number, number, number] = [sx, sy, sz]
   return (
     <group position={[sel.min.x + sx / 2, sel.min.y + sy / 2, sel.min.z + sz / 2]}>
-      <mesh renderOrder={2}>
-        <boxGeometry args={[sx, sy, sz]} />
+      <mesh geometry={UNIT_BOX} scale={scale} raycast={NO_RAY} renderOrder={2}>
         <meshBasicMaterial color="#4ea1ff" transparent opacity={0.16} depthWrite={false} />
       </mesh>
-      <lineSegments renderOrder={3}>
-        <edgesGeometry args={[new THREE.BoxGeometry(sx, sy, sz)]} />
+      <lineSegments geometry={UNIT_EDGES} scale={scale} raycast={NO_RAY} renderOrder={3}>
         <lineBasicMaterial color="#4ea1ff" depthTest={false} />
       </lineSegments>
     </group>
@@ -85,6 +174,7 @@ export function SlicePlane({
 
   return (
     <mesh
+      name="slice-plane"
       position={position}
       rotation={rotation}
       onPointerDown={onDown}
@@ -138,8 +228,13 @@ export function GhostSlice({
   return (
     <group>
       {cells.map(({ p, color }) => (
-        <mesh key={`${p.x}-${p.y}-${p.z}`} position={[p.x + 0.5, p.y + 0.5, p.z + 0.5]} raycast={() => null}>
-          <boxGeometry args={[0.98, 0.98, 0.98]} />
+        <mesh
+          key={`${p.x}-${p.y}-${p.z}`}
+          geometry={UNIT_BOX}
+          position={centerOf(p)}
+          scale={0.98}
+          raycast={NO_RAY}
+        >
           <meshBasicMaterial color={color} transparent opacity={0.22} depthWrite={false} />
         </mesh>
       ))}
@@ -157,8 +252,13 @@ export function AnchorMarker({
   if (!anchor) return null
   const p = planeToWorld({ axis, index }, anchor.u, anchor.v)
   return (
-    <mesh position={[p.x + 0.5, p.y + 0.5, p.z + 0.5]} raycast={() => null} renderOrder={3}>
-      <boxGeometry args={[1.04, 1.04, 1.04]} />
+    <mesh
+      geometry={UNIT_BOX}
+      position={centerOf(p)}
+      scale={1.04}
+      raycast={NO_RAY}
+      renderOrder={3}
+    >
       <meshBasicMaterial color="#ffcf4a" transparent opacity={0.5} depthTest={false} />
     </mesh>
   )
