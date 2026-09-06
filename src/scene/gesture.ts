@@ -59,7 +59,7 @@ const keyOf = (c: Cell | null) => (c ? `${c.x},${c.y},${c.z}` : '')
 export function step(
   state: GestureState,
   input: Input,
-  _ctx: Ctx,
+  ctx: Ctx,
 ): { state: GestureState; out: Output } {
   if (
     input.kind === 'cancel' || input.kind === 'lostCapture' ||
@@ -79,6 +79,15 @@ export function step(
   }
 
   if (input.kind === 'down') {
+    const toCamera =
+      ctx.mode === 'navigate' || input.button !== 0 || input.cell === null
+    if (toCamera) {
+      return {
+        state: { ...idle(), phase: 'navigating', pointerId: input.pointerId,
+                 pointerType: input.pointerType, startX: input.x, startY: input.y },
+        out: { phase: 'navigating', orbitEnabled: true },
+      }
+    }
     return {
       state: {
         phase: 'pending',
@@ -98,6 +107,13 @@ export function step(
     const dy = input.y - state.startY
     if (Math.hypot(dx, dy) <= thresholdFor(state.pointerType)) {
       return { state, out: { phase: 'pending', orbitEnabled: true } }
+    }
+    if (!ctx.dragTool) {
+      // Line, rect, fill, select and picker do not paint while dragging.
+      return {
+        state: { ...state, phase: 'navigating' },
+        out: { phase: 'navigating', orbitEnabled: true, release: state.pointerId ?? undefined },
+      }
     }
     const commit: Cell[] = []
     if (state.candidate) commit.push(state.candidate)
@@ -142,6 +158,13 @@ export function step(
         phase: 'idle', orbitEnabled: true, release: state.pointerId ?? undefined,
         closeStroke: true, classified: 'drag',
       },
+    }
+  }
+
+  if (input.kind === 'up' && state.phase === 'navigating') {
+    return {
+      state: idle(),
+      out: { phase: 'idle', orbitEnabled: true, classified: 'camera' },
     }
   }
 
