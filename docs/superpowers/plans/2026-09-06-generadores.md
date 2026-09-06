@@ -404,13 +404,15 @@ git commit -m "feat(voxel): cylinder and ellipsoid with half-block centered test
 import { flatRoof, gableRoof } from '../src/voxel/generators'
 
 test('el techo a dos aguas es más alto en la cumbrera que en el borde', () => {
+  // Huella 13x9: X es el eje largo, así que la cumbrera corre sobre X y la
+  // altura varía a lo largo de Z. Indexar por X daría una meseta.
   const r = gableRoof(box(4, 6, 4, 16, 6, 12), DIMS, 'minecraft:oak_planks', 1, 0)
-  const byX = new Map<number, number>()
-  for (const c of r.cells) byX.set(c.p.x, Math.max(byX.get(c.p.x) ?? -1, c.p.y))
+  const byZ = new Map<number, number>()
+  for (const c of r.cells) byZ.set(c.p.z, Math.max(byZ.get(c.p.z) ?? -1, c.p.y))
 
-  const ridgeX = 10
-  expect(byX.get(ridgeX)!).toBeGreaterThan(byX.get(4)!)
-  expect(byX.get(4)).toBe(6)
+  expect(byZ.get(8)!).toBeGreaterThan(byZ.get(4)!)
+  expect(byZ.get(4)).toBe(6)
+  expect(byZ.get(12)).toBe(6)
 })
 
 test('la cumbrera corre sobre el eje largo', () => {

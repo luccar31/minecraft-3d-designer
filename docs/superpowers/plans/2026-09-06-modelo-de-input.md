@@ -1152,7 +1152,7 @@ test('la goma sobre el piso vacío no apunta debajo de la grilla', async ({ page
   await page.waitForTimeout(200)
 
   const bajoGrilla = await page.evaluate(() => {
-    const eventos = JSON.parse(window.__mcb.tel.toJSON()).eventos as
+    const eventos = JSON.parse(window.__mcb.tel.toJSON()).events as
       { ev: string; data?: Record<string, number> }[]
     return eventos.some((e) => e.ev.startsWith('hover') && (e.data?.y ?? 0) < 0)
   })
@@ -1177,7 +1177,7 @@ test('en navigate, el registro no contiene ninguna escritura durante el gesto', 
   await page.waitForTimeout(200)
 
   const escrituras = await page.evaluate(() => {
-    const eventos = JSON.parse(window.__mcb.tel.toJSON()).eventos as { ev: string }[]
+    const eventos = JSON.parse(window.__mcb.tel.toJSON()).events as { ev: string }[]
     return eventos.filter((e) => e.ev === 'write' || e.ev === 'escritura').length
   })
   expect(escrituras).toBe(0)
@@ -1236,15 +1236,48 @@ Dentro de `Editor()`, reemplazar `applyAtPoint`, `endDrag` y `onDown` por:
     if (out.openStroke) s.beginStroke()
     if (out.commit?.length) {
       const r = pendingRes.current
-      if (r?.action === 'pick') s.pickAt(out.commit[0])
-      else s.applyCells(out.commit.map((c) => ({
-        p: c, id: r?.action === 'erase' ? undefined : s.block,
-      })))
+      const erase = r?.action === 'erase'
+      // En modo capa manda `planeAction`: es lo que implementa los anclajes de
+      // línea, rectángulo y selección, y el flood de relleno.
+      if (s.sliceView !== 'off') {
+        for (const c of out.commit) s.planeAction(worldToPlane(s.sliceAxis, c), erase)
+      } else if (r?.action === 'pick') {
+        s.pickAt(out.commit[0])
+      } else {
+        s.applyCells(out.commit.map((c) => ({ p: c, id: erase ? undefined : s.block })))
+      }
     }
     if (out.closeStroke) s.endStroke()
     if (out.classified) rec(EV.gestureClassified, str(out.classified), NaN, NaN)
     if (out.aborted) rec(EV.gestureAborted, str(out.aborted), NaN)
   }, [controls, canvasEl])
+```
+
+**Por qué esta rama no es opcional.** Sin ella, `line`, `rect`, `fill` y `select` dejan de funcionar: los tres primeros necesitan los anclajes de dos clicks y el flood, que viven en `planeAction`. Y `setTool('line')` **fuerza** el modo capa, así que la herramienta se elige y no hace nada.
+
+**Y `tests/editor.spec.ts` no puede atrapar esto**: sus tests de modo capa llaman a `planeAction` directamente en vez de clickear el canvas. Por eso la Task 8 tiene que agregar un test que clickee de verdad en modo capa:
+
+```ts
+test('en modo capa, un click dibuja en la celda de la capa activa', async ({ page }) => {
+  await ready(page)
+  await page.evaluate(() => {
+    const s = window.__mcb.store.getState()
+    s.newDesign({ x: 16, y: 12, z: 16 }, 'Capa')
+    s.setSliceView('isolate')
+    s.setSliceIndex(3)
+    s.setTool('brush')
+  })
+  const box = (await page.locator('canvas').boundingBox())!
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+  await page.waitForTimeout(200)
+
+  const ys = await page.evaluate(() => {
+    const w = window.__mcb.store.getState().world
+    return [...w.voxels.keys()].map((k) => (k >>> 10) & 1023)
+  })
+  expect(ys.length).toBeGreaterThan(0)
+  expect(new Set(ys)).toEqual(new Set([3]))
+})
 
   const feed = useCallback((input: Input) => {
     const { state, out } = step(gesture.current, input, ctxNow())
@@ -1345,6 +1378,8 @@ Los listeners de ventana se registran **una vez** en un `useEffect`, no dentro d
 ```
 
 - [ ] **Step 4: Nombrar las mallas para que `hitFrom` las distinga**
+
+**Este paso y el anterior son mutuamente dependientes: van juntos en el mismo commit.** Sin los nombres, `hitFrom` clasifica todo como `block` y revive el defecto 4 (`y = -1`) en vez de corregirlo.
 
 En el `<mesh>` del build plate agregar `name="build-plate"`. En `SlicePlane` (en `Overlays.tsx`) agregar `name="slice-plane"` a su `<mesh>`. Sin esto, `resolveCell` trata el plano como bloque y vuelve el bug de `y = -1`.
 
@@ -1656,7 +1691,7 @@ test('encuadrar con un solo bloque no mete la cámara adentro', async ({ page })
     st().requestFit()
     await new Promise((r) => setTimeout(r, 600))
     const log = window.__mcb.tel.toJSON()
-    const eventos = JSON.parse(log).eventos as { ev: string; data?: Record<string, number> }[]
+    const eventos = JSON.parse(log).events as { ev: string; data?: Record<string, number> }[]
     const pose = eventos.filter((e) => e.ev === 'camera.pose').pop()
     if (!pose?.data) return null
     const dx = pose.data.x - 8.5, dy = pose.data.y - 0.5, dz = pose.data.z - 8.5
@@ -1766,7 +1801,15 @@ Y añadir un listener de `keyup` en el mismo efecto:
     window.addEventListener('keyup', onKeyUp)
 ```
 
-`cameraMovedRef` se pone en `true` desde el `onStart` de OrbitControls, exponiéndolo por el store o por un módulo compartido chico.
+De dónde sale `cameraMovedWhileHeld`: el único que sabe si la cámara se movió es el `onStart` de OrbitControls, que vive en `Scene.tsx`, mientras el manejador de teclado vive en `App.tsx`. El spec §9 dice que el store gana **sólo** `mode` y `setMode`, así que no va ahí. Va en un módulo de cinco líneas, `src/scene/cameraActivity.ts`:
+
+```ts
+let moved = false
+export const markCameraMoved = () => { moved = true }
+export const consumeCameraMoved = () => { const m = moved; moved = false; return m }
+```
+
+`Scene.tsx` llama a `markCameraMoved` desde `onStart`; el `keyup` de `App.tsx` llama a `consumeCameraMoved()`. Estado transitorio de cámara, fuera del store del documento.
 
 - [ ] **Step 3: Actualizar el README**
 
@@ -1825,6 +1868,9 @@ git commit -m "feat: wire build/navigate mode into the app shell and update docs
 ---
 
 ## Notas para quien ejecute
+
+- **`main.tsx` renderiza bajo `React.StrictMode`**: el `useEffect` de listeners de la Task 8 monta, limpia con `feed({ kind: 'unmount' })`, y vuelve a montar en desarrollo. Es inofensivo — abortar desde `idle` ya está fijado como no-op por el test "abortar dos veces seguidas es inocuo" — pero va a aparecer un `gesture.aborted` de más en la telemetría al arrancar. No es un bug.
+- **La clave del JSON de telemetría es `events`, no `eventos`.** `toJSON()` emite `{ meta, events }`. Leer `.eventos` devuelve `undefined` y el test revienta en vez de fallar una aserción.
 
 - **Los nombres de la telemetría** (`EV.*`, categorías, campos) se leen de `src/debug/events.ts`. Ese archivo pasó por una traducción a inglés: usar lo que esté, no lo que diga este plan si difiere.
 - **No borrar `tests/editor.spec.ts`.** Son la red de seguridad; si alguno se pone rojo, la causa es una regresión real.
